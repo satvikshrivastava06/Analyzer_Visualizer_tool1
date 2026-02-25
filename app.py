@@ -5,6 +5,7 @@ import plotly.express as px
 import google.generativeai as genai
 import os
 import json
+import numpy as np
 
 # ==========================================
 # Configuration & Setup
@@ -63,6 +64,34 @@ with tab1:
     st.markdown("""
     Load data directly into DuckDB. For large files, use the upload feature to process out-of-core.
     """)
+    
+    # Quick Demo Data
+    st.subheader("⚡ Quick Demo")
+    st.markdown("Load a generated dataset to test the tool's features without connecting to a database.")
+    if st.button("Load Dummy Data"):
+        with st.spinner("Generating dummy dataset..."):
+            np.random.seed(42)
+            dates = pd.date_range(start="2023-01-01", periods=100)
+            demo_df = pd.DataFrame({
+                "Date": np.random.choice(dates, 500),
+                "Product": np.random.choice(["Laptop", "Smartphone", "Tablet", "Headphones", "Monitor"], 500),
+                "Category": np.random.choice(["Electronics", "Accessories"], 500, p=[0.7, 0.3]),
+                "Revenue": np.random.normal(500, 150, 500).round(2),
+                "Cost": np.random.normal(300, 100, 500).round(2),
+                "Quantity": np.random.randint(1, 10, 500),
+                "Defective": np.random.choice([True, False], 500, p=[0.05, 0.95]),
+                "Rating": np.random.uniform(1.0, 5.0, 500).round(1)
+            })
+            # Introduce missing values for "Smart Clean" tab Demo
+            demo_df.loc[10:30, 'Revenue'] = np.nan
+            demo_df.loc[40:60, 'Category'] = np.nan
+            
+            conn.execute("CREATE OR REPLACE VIEW current_data AS SELECT * FROM demo_df")
+            st.session_state.current_table = "current_data"
+            st.session_state.df_preview = demo_df
+            st.success("Dummy data loaded successfully! Explore it in the other tabs.")
+
+    st.divider()
     
     # Option A: MotherDuck Query
     st.subheader("Query MotherDuck Database")
@@ -261,5 +290,5 @@ print("Pipeline finished successfully! Shape:", df.shape)
     st.code(script_template, language="python")
     st.download_button("Download Script (reproducible_analysis.py)", script_template, file_name="reproducible_analysis.py")
     
-    req_txt = "streamlit\npandas\nduckdb\nplotly\ngoogle-generativeai"
+    req_txt = "streamlit\npandas\nduckdb\nplotly\ngoogle-generativeai\nnumpy"
     st.download_button("Download dependencies (requirements.txt)", req_txt, file_name="session_requirements.txt")
