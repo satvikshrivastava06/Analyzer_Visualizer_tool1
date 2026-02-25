@@ -95,7 +95,7 @@ with tab1:
     
     # Option A: MotherDuck Query
     st.subheader("Query MotherDuck Database")
-    default_query = "SELECT * FROM sample_data.nyc.taxi_trips LIMIT 5000"
+    default_query = "SELECT * FROM sample_data.nyc.taxi LIMIT 5000"
     query = st.text_area("SQL Query", value=default_query, height=100)
     
     if st.button("Load Query Results"):
@@ -275,7 +275,7 @@ import pandas as pd
 conn = duckdb.connect('md:') # Assumes MOTHERDUCK_TOKEN is in env
 
 # 2. Run Query
-query = \"\"\"SELECT * FROM sample_data.nyc.taxi_trips LIMIT 5000\"\"\"
+query = \"\"\"SELECT * FROM sample_data.nyc.taxi LIMIT 5000\"\"\"
 print("Executing robust fetching...")
 df = conn.execute(query).df()
 
