@@ -347,7 +347,7 @@ with tab4:
                         with col_fb2:
                             st.button("👎 Not Useful")
                     except Exception as e:
-                        st.error("Failed to fetch suggestions.")
+                        st.error(f"Failed to fetch suggestions: {e}")
 
 # ------------------------------------------
 # Tab 5: Export Pipeline (Reproducibility)
