@@ -267,7 +267,7 @@ with tab3:
                     schema_str = schema_df[['column_name', 'column_type']].to_string()
                     
                     # 2. Ask Gemini
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.0-flash')
                     ai_prompt = f"""
                     You are a data analyst assistant. You have a table named '{st.session_state.current_table}'.
                     Schema:
@@ -326,7 +326,7 @@ with tab4:
                 with st.spinner("AI is analyzing schema for optimal visualizations..."):
                     schema_str = df.dtypes.to_string()
                     try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.0-flash')
                         prompt = f"""
                         Given this pandas dataframe schema:
                         {schema_str}
