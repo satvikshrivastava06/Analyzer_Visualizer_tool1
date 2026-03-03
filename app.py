@@ -345,9 +345,16 @@ with tab3:
 
             with st.chat_message("assistant"):
                 with st.spinner("Analyzing..."):
-                    # 1. Get Schema
-                    schema_df = conn.execute(f"DESCRIBE {st.session_state.current_table}").df()
-                    schema_str = schema_df[['column_name', 'column_type']].to_string()
+                    # 1. Get Schema — dual path to prevent CatalogException forever
+                    # Path A: Try DuckDB DESCRIBE (works for MotherDuck persistent tables)
+                    # Path B: Fallback to pandas df.dtypes (works after session reload / temp views)
+                    try:
+                        schema_df = conn.execute(f"DESCRIBE {st.session_state.current_table}").df()
+                        schema_str = schema_df[['column_name', 'column_type']].to_string()
+                    except Exception:
+                        # DuckDB doesn't have the table in this session — use pandas types instead
+                        df_schema = st.session_state.df_preview
+                        schema_str = df_schema.dtypes.to_string() if df_schema is not None else "Schema unavailable"
                     
                     # 2. Ask AI using multi-provider fallback
                     ai_prompt = f"""
