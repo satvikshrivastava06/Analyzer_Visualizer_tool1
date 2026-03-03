@@ -49,24 +49,79 @@ if 'db_conn' not in st.session_state:
 
 conn = st.session_state.db_conn
 
-# Helper: Resilient Gemini Call
-def safe_gemini_call(model_name, prompt, max_retries=3):
+# Optional Groq Key (Free tier - https://console.groq.com)
+groq_key = None
+try:
+    groq_key = st.secrets["groq"]["api_key"]
+except (FileNotFoundError, KeyError):
+    pass  # Groq is optional; Gemini will be used as primary
+
+# ==========================================
+# Multi-Provider AI Fallback System
+# ==========================================
+def safe_ai_call(prompt):
     """
-    Calls Gemini model with a simple retry logic to handle 429 quota errors.
+    Universal AI call with multi-provider fallback strategy.
+    1st: Tries best free Gemini models (fastest, most capable)
+    2nd: If all Gemini quota exhausted, falls back to Groq free models
+         (Llama 3.3 70B, Mixtral, Gemma 2 - very fast, zero cost)
     """
     import time
-    model = genai.GenerativeModel(model_name)
-    for attempt in range(max_retries):
+
+    # --- Tier 1: Gemini (Google AI Studio Free Tier) ---
+    if gemini_key:
+        gemini_candidates = [
+            'models/gemini-2.5-flash',       # Best: Latest & most capable
+            'models/gemini-2.0-flash',        # Good: Fast & reliable
+            'models/gemini-2.0-flash-lite',   # Lighter quota usage
+            'models/gemini-flash-latest',     # Alias: always latest flash
+            'models/gemma-3-27b-it',          # Open: Google's Gemma 3 27B
+            'models/gemma-3-12b-it',          # Open: Google's Gemma 3 12B
+            'models/gemini-pro-latest',       # Classic: Gemini Pro
+        ]
+        for model_name in gemini_candidates:
+            try:
+                model = genai.GenerativeModel(model_name)
+                resp = model.generate_content(prompt)
+                return resp.text, model_name
+            except Exception as e:
+                err = str(e).lower()
+                # Quota/not-found: skip to next model silently
+                if any(x in err for x in ["429", "404", "not supported", "resource_exhausted"]):
+                    continue
+                else:
+                    raise e  # Real error – surface it
+
+    # --- Tier 2: Groq (Free tier - Llama/Mixtral/Gemma via Groq cloud) ---
+    if groq_key:
         try:
-            return model.generate_content(prompt)
-        except Exception as e:
-            if "429" in str(e) and attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 5
-                st.warning(f"⚠️ Quota limit hit. Retrying in {wait_time}s... (Attempt {attempt + 1}/{max_retries})")
-                time.sleep(wait_time)
-            else:
-                raise e
-    return None
+            from groq import Groq
+            groq_client = Groq(api_key=groq_key)
+            groq_candidates = [
+                "llama-3.3-70b-versatile",     # Best: Llama 3.3 70B (most capable)
+                "mixtral-8x7b-32768",           # Great: Mixtral 8x7B (long context)
+                "gemma2-9b-it",                 # Fast: Google Gemma 2 9B via Groq
+                "llama-3.1-8b-instant",         # Fastest: Llama 3.1 8B
+            ]
+            for model_name in groq_candidates:
+                try:
+                    completion = groq_client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1024,
+                    )
+                    return completion.choices[0].message.content, f"groq/{model_name}"
+                except Exception as e:
+                    err = str(e).lower()
+                    if any(x in err for x in ["429", "rate_limit", "model_not_found", "deactivated"]):
+                        continue
+                    else:
+                        raise e
+        except ImportError:
+            pass  # groq package not installed
+
+    # --- All providers exhausted ---
+    raise Exception("🛑 All free AI models are currently at their quota limit. Please wait a few minutes and try again.")
 
 # Initialize session state for data
 if 'current_table' not in st.session_state:
@@ -203,9 +258,18 @@ with tab1:
         st.subheader("Data Preview (First 1000 rows)")
         st.dataframe(st.session_state.df_preview)
         
-        # Get count
-        total_rows = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()[0]
-        st.caption(f"Total Rows in Engine: {total_rows}")
+        # Get count safely - guard against CatalogException when table not in session
+        try:
+            if st.session_state.current_table:
+                total_rows = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()[0]
+                st.caption(f"Total Rows in Engine: {total_rows}")
+            else:
+                # Fall back to counting the preview dataframe
+                st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
+        except Exception:
+            # If the DuckDB session doesn't have the table registered (e.g. after a reload),
+            # fall back gracefully to counting the preview dataframe
+            st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
 
 # ------------------------------------------
 # Tab 2: Smart Clean (Automated Profiling)
@@ -285,16 +349,16 @@ with tab3:
                     schema_df = conn.execute(f"DESCRIBE {st.session_state.current_table}").df()
                     schema_str = schema_df[['column_name', 'column_type']].to_string()
                     
-                    # 2. Ask Gemini using resilient helper
+                    # 2. Ask Gemini using resilient multi-model fallback
                     try:
-                        response = safe_gemini_call('gemini-2.0-flash-lite', ai_prompt)
+                        response = safe_gemini_call(ai_prompt)
                         if response:
                             st.markdown(response.text)
                             st.session_state.messages.append({"role": "assistant", "content": response.text})
                             st.caption("⚠️ **AI Note:** This answer is generated by an LLM based on table schema context and may require manual verification.")
                     except Exception as e:
                         if "429" in str(e):
-                            st.error("🛑 Quota Exceeded: The free tier limit has been reached. Please wait a minute before asking again.")
+                            st.error("🛑 Global Quota Exceeded: All free models are currently at their limit. Please wait a few minutes before asking again.")
                         else:
                             st.error(f"Error generating response: {e}")
 
@@ -345,7 +409,7 @@ with tab4:
                     CRITICAL: Additionally, provide a brief "Why this chart?" rationale for each to improve data literacy (Best Practice 14).
                     """
                     try:
-                        response = safe_gemini_call('gemini-2.0-flash-lite', prompt)
+                        response = safe_gemini_call(prompt)
                         if response:
                             st.markdown(response.text)
                             
@@ -358,7 +422,7 @@ with tab4:
                                 st.button("👎 Not Useful")
                     except Exception as e:
                         if "429" in str(e):
-                            st.error("🛑 Quota Exceeded: The free tier limit has been reached. Please wait a minute before requesting suggestions again.")
+                            st.error("🛑 Global Quota Exceeded: All free models are currently at their limit. Please wait a few minutes before requesting suggestions again.")
                         else:
                             st.error(f"Failed to fetch suggestions: {e}")
 
