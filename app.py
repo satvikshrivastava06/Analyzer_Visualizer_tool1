@@ -232,10 +232,10 @@ with tab2:
                     cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].mode()[0] if not cleaned_df[col].mode().empty else "Unknown")
                 
                 st.session_state.df_preview = cleaned_df
-                # Register the cleaned pandas df back to Duckdb (as a table)
-                conn.execute("CREATE OR REPLACE TABLE current_data AS SELECT * FROM cleaned_df")
+                # Register the cleaned pandas df back to Duckdb (as a temporary view for the session)
+                conn.execute("CREATE OR REPLACE TEMP VIEW current_data AS SELECT * FROM cleaned_df")
                 st.success("Imputed missing values! (Median for nums, Mode for categorical)")
-                st.experimental_rerun()
+                st.rerun()
 
 # ------------------------------------------
 # Tab 3: AI Assistant (Natural Language)
