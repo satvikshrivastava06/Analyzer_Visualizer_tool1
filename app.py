@@ -53,7 +53,8 @@ conn = st.session_state.db_conn
 if 'current_table' not in st.session_state:
     # Attempt to pre-load the user's executive KPI data if it exists in the connected DB
     try:
-        table_check = conn.execute(f"SELECT table_name FROM information_schema.tables WHERE table_name = 'executive_kpi_data'").fetchone()
+        # Check if executive_kpi_data exists in the main schema of the connected db
+        table_check = conn.execute(f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{db_name}' AND table_name = 'executive_kpi_data'").fetchone()
         if table_check:
             st.session_state.current_table = "executive_kpi_data"
             st.session_state.df_preview = conn.execute("SELECT * FROM executive_kpi_data LIMIT 1000").df()
@@ -112,8 +113,8 @@ with tab1:
     # Option A: MotherDuck Table Selector (Dynamic)
     st.subheader(f"📊 Explore `{db_name}` Tables")
     try:
-        # Fetch actual tables from the user's database
-        tables_df = conn.execute(f"SELECT table_name FROM {db_name}.information_schema.tables WHERE table_schema = 'main'").df()
+        # Fetch actual tables from the user's database using the catalog filter
+        tables_df = conn.execute(f"SELECT table_name FROM information_schema.tables WHERE table_catalog = '{db_name}' AND table_schema = 'main'").df()
         available_tables = tables_df['table_name'].tolist()
         
         if available_tables:
@@ -225,7 +226,7 @@ with tab2:
                 # In a real app we would build a dynamic SQL query based on pandas types.
                 # For this demo, we'll do the cleaning on the preview dataframe.
                 cleaned_df = df.copy()
-                for col in cleaned_df.select_dtypes(include=['float64', 'int64']).columns:
+                for col in cleaned_df.select_dtypes(include=[np.number]).columns:
                     cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].median())
                 for col in cleaned_df.select_dtypes(include=['object']).columns:
                     cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].mode()[0] if not cleaned_df[col].mode().empty else "Unknown")
@@ -401,7 +402,8 @@ with tab1b:
         kpi_cols = st.columns(4)
         
         # Calculate some dynamic KPIs based on available data types
-        num_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        # Using np.number for robust numeric selection
+        num_cols = df.select_dtypes(include=[np.number]).columns
         
         # KPI 1: Total Volume
         with kpi_cols[0]:
@@ -412,7 +414,8 @@ with tab1b:
                 st.metric(label="Total Records", value=f"{len(df):,}")
                 
         # Additional KPIs: Dynamic deltas based on temporal context
-        date_cols = df.select_dtypes(include=['datetime64', 'datetime', 'date']).columns.tolist()
+        # Best Practice 8: Robust datetime detection using pandas api
+        date_cols = [col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col])]
         if not date_cols:
             # Try to find columns with 'date' or 'time' in the name if types aren't inferred
             date_cols = [c for c in df.columns if 'date' in c.lower() or 'time' in c.lower()]
