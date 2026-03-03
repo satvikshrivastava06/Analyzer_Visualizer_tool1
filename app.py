@@ -22,20 +22,6 @@ BRAND_COLORS = ["#00B8D9", "#36B37E", "#FF5630", "#FFAB00", "#6554C0"]
 
 st.set_page_config(page_title="Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash Kamal Koshti and Vansh Dhakad )", page_icon="🧠", layout="wide")
 
-# Best Practice 13: Integrate Governance/Lineage in UI Layer
-# Add a persistent header/sidebar element indicating tool status constraint
-with st.sidebar:
-    st.markdown("### 🗄️ Governance & Lineage")
-    if 'current_table' in st.session_state and st.session_state.current_table:
-        st.success(f"**Active Source:** `{st.session_state.current_table}`")
-        if 'df_preview' in st.session_state and st.session_state.df_preview is not None:
-             st.caption(f"Cached rows (Preview): {len(st.session_state.df_preview)}")
-             st.caption(f"Schema columns: {len(st.session_state.df_preview.columns)}")
-    else:
-        st.warning("No data source connected.")
-
-st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash Kamal Koshti and Vansh Dhakad )")
-
 # 1. Initialize API Keys
 try:
     md_token = st.secrets["motherduck"]["token"]
@@ -67,7 +53,6 @@ conn = st.session_state.db_conn
 if 'current_table' not in st.session_state:
     # Attempt to pre-load the user's executive KPI data if it exists in the connected DB
     try:
-        # Check if executive_kpi_data exists in the main schema of the connected db
         table_check = conn.execute(f"SELECT table_name FROM information_schema.tables WHERE table_name = 'executive_kpi_data'").fetchone()
         if table_check:
             st.session_state.current_table = "executive_kpi_data"
@@ -79,6 +64,29 @@ if 'current_table' not in st.session_state:
 
 if 'df_preview' not in st.session_state:
     st.session_state.df_preview = None
+
+# Best Practice 13: Integrate Governance/Lineage in UI Layer
+with st.sidebar:
+    st.markdown("### 🗄️ Governance & Lineage")
+    
+    # Connection Status
+    if conn:
+        st.success(f"✅ **MotherDuck Connected**\n\nDatabase: `{db_name}`")
+    else:
+        st.error("❌ **MotherDuck Disconnected**")
+    
+    st.divider()
+    
+    # Active Table Status
+    if st.session_state.current_table:
+        st.info(f"**Active Source:** `{st.session_state.current_table}`")
+        if st.session_state.df_preview is not None:
+             st.caption(f"Cached rows (Preview): {len(st.session_state.df_preview)}")
+             st.caption(f"Schema columns: {len(st.session_state.df_preview.columns)}")
+    else:
+        st.warning("No data source loaded.")
+
+st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash Kamal Koshti and Vansh Dhakad )")
 
 # ==========================================
 # UI Layout: Tabs
