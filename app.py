@@ -1,11 +1,17 @@
+# Copyright (c) 2026 Satvik Shrivastava. All rights reserved.
+# This work is the property of Satvik Shrivastava.
+# Unauthorized copying, modification, or distribution is strictly prohibited.
+
 import streamlit as st
+
 import pandas as pd
 import duckdb
 import plotly.express as px
-import google.generativeai as genai
+import google.generativeai as genai # type: ignore
 import os
 import json
 import numpy as np
+from typing import Any, cast
 
 # ==========================================
 # Configuration & Setup
@@ -95,7 +101,7 @@ def safe_ai_call(prompt):
     # --- Tier 2: Groq (Free tier - Llama/Mixtral/Gemma via Groq cloud) ---
     if groq_key:
         try:
-            from groq import Groq
+            from groq import Groq # type: ignore
             groq_client = Groq(api_key=groq_key)
             groq_candidates = [
                 "llama-3.3-70b-versatile",     # Best: Llama 3.3 70B (most capable)
@@ -123,6 +129,34 @@ def safe_ai_call(prompt):
     # --- All providers exhausted ---
     raise Exception("🛑 All free AI models are currently at their quota limit. Please wait a few minutes and try again.")
 
+def validate_sql_query(query):
+    """
+    SQL Security Sandbox: Scans for destructive keywords to prevent SQL Injection
+    or accidental data deletion via AI or manual SQL.
+    """
+    dangerous_keywords = ['DROP', 'DELETE', 'UPDATE', 'ALTER', 'TRUNCATE', 'GRANT', 'INSERT', 'REVOKE']
+    query_upper = query.upper()
+    for keyword in dangerous_keywords:
+        # Check for whole word match to avoid false positives with column names
+        if f" {keyword} " in f" {query_upper} " or query_upper.startswith(keyword):
+            return False, keyword
+    return True, None
+
+def log_version_action(action_name, code, details=""):
+    """
+    Git-Lite: Logs every action taken on the data to ensure full auditability/provenance.
+    """
+    import datetime
+    if 'version_history' not in st.session_state:
+        st.session_state.version_history = []
+    
+    st.session_state.version_history.append({
+        "timestamp": datetime.datetime.now().strftime("%I:%M:%S %p"),
+        "action": action_name,
+        "code": code,
+        "details": details
+    })
+
 # Initialize session state for data
 if 'current_table' not in st.session_state:
     # Attempt to pre-load the user's executive KPI data if it exists in the connected DB
@@ -139,6 +173,9 @@ if 'current_table' not in st.session_state:
 
 if 'df_preview' not in st.session_state:
     st.session_state.df_preview = None
+
+if 'version_history' not in st.session_state:
+    st.session_state.version_history = []
 
 # Best Practice 13: Integrate Governance/Lineage in UI Layer
 with st.sidebar:
@@ -160,6 +197,17 @@ with st.sidebar:
              st.caption(f"Schema columns: {len(st.session_state.df_preview.columns)}")
     else:
         st.warning("No data source loaded.")
+
+    st.divider()
+    st.markdown("### 📜 Version History (Git-Lite)")
+    if not st.session_state.version_history:
+        st.caption("No actions recorded yet.")
+    else:
+        for item in reversed(st.session_state.version_history):
+            with st.expander(f"{item['timestamp']} - {item['action']}"):
+                st.code(item['code'], language="sql" if "SQL" in item['action'] else "python")
+                if item['details']:
+                    st.caption(item['details'])
 
 st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash Kamal Koshti and Vansh Dhakad )")
 
@@ -217,13 +265,18 @@ with tab1:
     
     if st.button("Run Query"):
         with st.spinner("Executing query..."):
-            try:
-                conn.execute(f"CREATE OR REPLACE VIEW current_data AS {query}")
-                st.session_state.current_table = "current_data"
-                st.session_state.df_preview = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
-                st.success("Query executed successfully!")
-            except Exception as e:
-                st.error(f"Query Error: {e}")
+            is_safe, keyword = validate_sql_query(query)
+            if not is_safe:
+                st.error(f"🛑 **Security Block:** Destructive keyword `{keyword}` detected. Only SELECT queries are permitted in this sandbox.")
+            else:
+                try:
+                    conn.execute(f"CREATE OR REPLACE VIEW current_data AS {query}")
+                    st.session_state.current_table = "current_data"
+                    st.session_state.df_preview = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                    log_version_action("Custom SQL Query", query, "Manual SQL executed in editor.")
+                    st.success("Query executed successfully!")
+                except Exception as e:
+                    st.error(f"Query Error: {e}")
 
     st.divider()
     
@@ -253,23 +306,23 @@ with tab1:
             st.session_state.df_preview = demo_df
             st.success("Dummy data loaded successfully!")
 
-    # Display Preview
-    if st.session_state.df_preview is not None:
-        st.subheader("Data Preview (First 1000 rows)")
-        st.dataframe(st.session_state.df_preview)
-        
-        # Get count safely - guard against CatalogException when table not in session
-        try:
-            if st.session_state.current_table:
-                total_rows = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()[0]
-                st.caption(f"Total Rows in Engine: {total_rows}")
-            else:
-                # Fall back to counting the preview dataframe
+        if st.session_state.df_preview is not None:
+            st.subheader("Data Preview (First 1000 rows)")
+            st.dataframe(st.session_state.df_preview)
+            
+            # Get count safely - guard against CatalogException when table not in session
+            try:
+                if st.session_state.current_table:
+                    res = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()
+                    total_rows = res[0] if res else 0
+                    st.caption(f"Total Rows in Engine: {total_rows}")
+                else:
+                    # Fall back to counting the preview dataframe
+                    st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
+            except Exception:
+                # If the DuckDB session doesn't have the table registered (e.g. after a reload),
+                # fall back gracefully to counting the preview dataframe
                 st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
-        except Exception:
-            # If the DuckDB session doesn't have the table registered (e.g. after a reload),
-            # fall back gracefully to counting the preview dataframe
-            st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
 
 # ------------------------------------------
 # Tab 2: Smart Clean (Automated Profiling)
@@ -279,7 +332,7 @@ with tab2:
     if st.session_state.current_table is None:
         st.info("Please load data in the 'Data Ingestion' tab first.")
     else:
-        df = st.session_state.df_preview
+        df = cast(pd.DataFrame, st.session_state.df_preview)
         
         st.subheader("Data Profile")
         col1, col2 = st.columns(2)
@@ -310,15 +363,148 @@ with tab2:
                 # For this demo, we'll do the cleaning on the preview dataframe.
                 cleaned_df = df.copy()
                 for col in cleaned_df.select_dtypes(include=[np.number]).columns:
-                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].median())
+                    median_val = cleaned_df[col].median()
+                    cleaned_df[col] = cleaned_df[col].fillna(median_val)
                 for col in cleaned_df.select_dtypes(include=['object']).columns:
-                    cleaned_df[col] = cleaned_df[col].fillna(cleaned_df[col].mode()[0] if not cleaned_df[col].mode().empty else "Unknown")
+                    mode_val = cleaned_df[col].mode()
+                    if not mode_val.empty:
+                        cleaned_df[col] = cleaned_df[col].fillna(mode_val.iloc[0])
+                    else:
+                        cleaned_df[col] = cleaned_df[col].fillna("Unknown")
                 
                 st.session_state.df_preview = cleaned_df
                 # Register the cleaned pandas df back to Duckdb (as a temporary view for the session)
                 conn.execute("CREATE OR REPLACE TEMP VIEW current_data AS SELECT * FROM cleaned_df")
+                log_version_action("Heuristic Imputation", "df.fillna(median/mode)", "Filled numeric with median and categorical with mode.")
                 st.success("Imputed missing values! (Median for nums, Mode for categorical)")
                 st.rerun()
+                
+        # 1. Data Privacy & Security (IJCDS Research Implementation)
+        st.markdown("**(IJCDS Best Practice: Data Privacy)**")
+        if st.button("Anonymize PII Data (Masking)"):
+            with st.spinner("Detecting and masking sensitive columns..."):
+                cleaned_df = df.copy()
+                pii_keywords = ['name', 'email', 'phone', 'ssn', 'address', 'ip', 'password', 'credit']
+                masked_cols = []
+                
+                for col in cleaned_df.columns:
+                    if any(keyword in col.lower() for keyword in pii_keywords):
+                        # Mask data (e.g. John Doe -> J*** D*** or simply [REDACTED])
+                        cleaned_df[col] = "[REDACTED]"
+                        masked_cols.append(col)
+                
+                if masked_cols:
+                    st.session_state.df_preview = cleaned_df
+                    conn.execute("CREATE OR REPLACE TEMP VIEW current_data AS SELECT * FROM cleaned_df")
+                    log_version_action("PII Anonymization", f"df[{masked_cols}] = '[REDACTED]'", f"Masked {len(masked_cols)} columns.")
+                    st.success(f"Successfully anonymized {len(masked_cols)} columns: {', '.join(masked_cols)}")
+                    st.rerun()
+                else:
+                    st.info("No common PII columns detected based on column names.")
+
+        # 2. Resolving DataViz Challenges (IJCDS Research Implementation Sections 6 & 7)
+        st.markdown("**(IJCDS Sections 6 & 7: Resolving DataViz Challenges)**")
+        col_clean1, col_clean2 = st.columns(2)
+        with col_clean1:
+            if st.button("Drop Duplicates (Prevent Illogical Charts)"):
+                initial_count = len(df)
+                cleaned_df = df.drop_duplicates()
+                final_count = len(cleaned_df)
+                st.session_state.df_preview = cleaned_df
+                conn.execute("CREATE OR REPLACE TEMP VIEW current_data AS SELECT * FROM cleaned_df")
+                if initial_count > final_count:
+                    log_version_action("Drop Duplicates", "df.drop_duplicates()", f"Removed {initial_count - final_count} rows.")
+                    st.success(f"Dropped {initial_count - final_count} duplicate rows.")
+                    st.rerun()
+                else:
+                    st.info("No duplicate rows found.")
+        
+        with col_clean2:
+            if st.button("Drop Missing NAs"):
+                initial_count = len(df)
+                cleaned_df = df.dropna()
+                final_count = len(cleaned_df)
+                st.session_state.df_preview = cleaned_df
+                conn.execute("CREATE OR REPLACE TEMP VIEW current_data AS SELECT * FROM cleaned_df")
+                if initial_count > final_count:
+                    log_version_action("Drop Missing NAs", "df.dropna()", f"Removed {initial_count - final_count} rows.")
+                    st.success(f"Dropped {initial_count - final_count} rows with NA values.")
+                    st.rerun()
+                else:
+                    st.info("No missing values found.")
+
+        if st.button("Run Anomaly / Outlier Discovery (Combating Human Error)"):
+            with st.spinner("Scanning for statistical anomalies..."):
+                num_cols = df.select_dtypes(include=[np.number]).columns
+                if len(num_cols) == 0:
+                    st.info("No numerical columns available to check for anomalies.")
+                else:
+                    # Simple Z-score logic for demonstration. Z > 3 is generally considered an outlier.
+                    anomalies_found = []
+                    for col in num_cols:
+                        mean_val = df[col].mean()
+                        std_val = df[col].std()
+                        if std_val > 0:
+                            z_scores = ((df[col] - mean_val) / std_val).abs()
+                            outliers = z_scores[z_scores > 3]
+                            if len(outliers) > 0:
+                                anomalies_found.append(f"**{col}**: {len(outliers)} potential outlines detected (Z-score > 3).")
+                    
+                    if anomalies_found:
+                        st.warning("⚠️ **Potential Human Entry Errors Discovered!**")
+                        for anomaly in anomalies_found:
+                            st.write(anomaly)
+                        st.caption("Consider reviewing these values to prevent dataset skewing.")
+                    else:
+                        st.success("No extreme statistical anomalies detected in numerical columns.")
+
+        st.markdown("**(Engineering Best Practice: Data Quality Guardrails)**")
+        if st.button("🔍 Run Data Quality Audit"):
+            with st.spinner("Auditing data integrity..."):
+                issues = []
+                # Check 1: Negative values in common financial columns
+                fin_keywords = ['revenue', 'fare', 'amount', 'price', 'cost', 'sales', 'quantity']
+                for col in df.select_dtypes(include=[np.number]).columns:
+                    if any(key in col.lower() for key in fin_keywords):
+                        neg_count = (df[col] < 0).sum()
+                        if neg_count > 0:
+                            issues.append(f"🚩 **{col}**: Found {neg_count} negative values (Logical error for financial data).")
+                
+                # Check 2: Malformed Emails (basic check)
+                for col in df.select_dtypes(include=['object']).columns:
+                    if 'email' in col.lower():
+                        invalid_emails = df[df[col].astype(str).str.contains('@') == False]
+                        if len(invalid_emails) > 0:
+                            issues.append(f"🚩 **{col}**: Found {len(invalid_emails)} rows missing '@' symbol.")
+
+                if issues:
+                    st.warning("### Data Quality Audit Results")
+                    for issue in issues:
+                        st.write(issue)
+                else:
+                    st.success("Data Quality Audit passed! No glaring logical inconsistencies found.")
+
+        st.markdown("**(Engineering Best Practice: Automated Documentation)**")
+        if st.button("📝 Generate AI Data Dictionary"):
+            with st.spinner("AI is documenting your dataset..."):
+                sample_df = df.head(10).to_string()
+                doc_prompt = f"""
+                Analyze this dataset sample and schema:
+                {sample_df}
+                
+                Create a professional Data Dictionary. For each column:
+                1. Describe what it likely represents in a business context.
+                2. Suggest 1 advanced KPI that could be derived from it.
+                
+                Format as a clean markdown table.
+                """
+                try:
+                    dictionary, model_used = safe_ai_call(doc_prompt)
+                    st.markdown("### 📘 AI Data Dictionary")
+                    st.markdown(dictionary)
+                    st.caption(f"Generated by {model_used}. This documentation helps with long-term project maintainability.")
+                except Exception as e:
+                    st.error(f"Could not generate dictionary: {e}")
 
 # ------------------------------------------
 # Tab 3: AI Assistant (Natural Language)
@@ -353,8 +539,8 @@ with tab3:
                         schema_str = schema_df[['column_name', 'column_type']].to_string()
                     except Exception:
                         # DuckDB doesn't have the table in this session — use pandas types instead
-                        df_schema = st.session_state.df_preview
-                        schema_str = df_schema.dtypes.to_string() if df_schema is not None else "Schema unavailable"
+                        df_prev = cast(pd.DataFrame, st.session_state.df_preview)
+                        schema_str = df_prev.dtypes.to_string() if df_prev is not None else "Schema unavailable"
                     
                     # 2. Ask AI using multi-provider fallback
                     ai_prompt = f"""
@@ -365,13 +551,51 @@ with tab3:
                     The user asked: "{prompt}"
 
                     Please provide a friendly, helpful, and concise answer explaining how to find this or what it might mean.
-                    If you can write a DuckDB SQL query to get the answer, provide it within a ```sql block.
+                    If the user wants to filter or refine the active dataset (e.g. 'show only electronics', 'remove rows with price > 100'), provide a SELECT query that represents the NEW desired state.
+                    
+                    FORMATTING:
+                    1. For standard insights, use ```sql blocks.
+                    2. For 'Agentic Execution' (Filtering/Transformation), wrap the SQL query in [AGENTIC_SELECT]...[/AGENTIC_SELECT] tags so I can execute it for the user.
+                    
+                    IMPORTANT: Only suggest SELECT queries. Never suggest DROP, DELETE, or UPDATE.
                     """
                     try:
                         text, used_model = safe_ai_call(ai_prompt)
                         st.markdown(text)
+                        
+                        # --- Agentic AI Execution Logic ---
+                        import re
+                        match = re.search(r"\[AGENTIC_SELECT\](.*?)\[/AGENTIC_SELECT\]", text, re.DOTALL)
+                        if match:
+                            agentic_sql = match.group(1).strip()
+                            # Display the "Surgery" button
+                            if st.button("🚀 Perform this Change (Live Data Surgery)"):
+                                with st.spinner("Executing live surgery..."):
+                                    is_safe, keyword = validate_sql_query(agentic_sql)
+                                    if not is_safe:
+                                        st.error(f"🛑 Security Block: Destructive keyword `{keyword}` detected.")
+                                    else:
+                                        try:
+                                            # Update the view to the new filtered state
+                                            conn.execute(f"CREATE OR REPLACE VIEW current_data AS {agentic_sql}")
+                                            st.session_state.df_preview = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                                            log_version_action("Agentic Data Surgery", agentic_sql, f"AI-driven refinement using {used_model}")
+                                            st.success("Data successfully refined! Check the Data Ingestion or Summary tabs to see results.")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Surgery failed: {e}")
+
                         st.session_state.messages.append({"role": "assistant", "content": text})
-                        st.caption(f"⚠️ **AI Note:** Generated by `{used_model}`. May require manual verification.")
+                        # Styled model attribution badge
+                        short_name = used_model.replace("models/", "").replace("groq/", "⚡ ")
+                        st.markdown(
+                            f"""<div style="display:inline-flex;align-items:center;gap:6px;
+                                background:#1e293b;color:#94a3b8;border-radius:20px;
+                                padding:3px 10px;font-size:11px;margin-top:6px;">
+                                🤖 <span style="color:#38bdf8;font-weight:600;">{short_name}</span>
+                            </div>""",
+                            unsafe_allow_html=True
+                        )
                     except Exception as e:
                         st.error(str(e))
 
@@ -383,26 +607,62 @@ with tab4:
     if st.session_state.current_table is None:
         st.info("Please load data first.")
     else:
-        df = st.session_state.df_preview
+        df = cast(pd.DataFrame, st.session_state.df_preview)
         
-        st.markdown("### Manual Chart Creation")
+        st.markdown("### 📊 Interactive Visualizations (IJCDS Best Practices)")
+        st.markdown("**1. Interpretability (Colorblind Safe)**")
+        use_colorblind = st.toggle("Use Colorblind-Safe Palette", value=False)
+        colors = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"] if use_colorblind else BRAND_COLORS
+        
+        st.markdown("**2. Mitigating Data Overload (Smart Sampling)**")
+        max_points = st.slider("Max Data Points to Plot (Prevents Browser Freeze)", min_value=100, max_value=50000, value=10000, step=100)
+        
+        # Apply sampling if data is too large
+        plot_df = df.sample(n=min(len(df), max_points), random_state=42) if len(df) > max_points else df
+        if len(df) > max_points:
+            st.caption(f"⚠️ *Showing a random sample of {max_points} points (out of {len(df)}) to prevent data overload.*")
+
+        st.markdown("**3. Advanced Charting (Avoiding Oversimplification)**")
         col1, col2, col3 = st.columns(3)
         with col1:
-            chart_type = st.selectbox("Chart", ["Bar", "Scatter", "Histogram", "Box"])
+            chart_type = st.selectbox("Chart", ["Bar", "Scatter", "Histogram", "Box", "Violin", "Treemap", "Sunburst"])
         with col2:
-            x_ax = st.selectbox("X-Axis", df.columns.tolist())
+            x_ax = st.selectbox("X-Axis / Path 1", df.columns.tolist())
         with col3:
-            y_ax = st.selectbox("Y-Axis", df.columns.tolist() + ["None"])
+            y_ax = st.selectbox("Y-Axis / Path 2", df.columns.tolist() + ["None"])
 
         if st.button("Plot Manual"):
-            if chart_type == "Bar" and y_ax != "None":
-                st.plotly_chart(px.bar(df, x=x_ax, y=y_ax), use_container_width=True)
-            elif chart_type == "Scatter" and y_ax != "None":
-                st.plotly_chart(px.scatter(df, x=x_ax, y=y_ax), use_container_width=True)
-            elif chart_type == "Histogram":
-                st.plotly_chart(px.histogram(df, x=x_ax), use_container_width=True)
-            elif chart_type == "Box" and y_ax != "None":
-                st.plotly_chart(px.box(df, x=x_ax, y=y_ax), use_container_width=True)
+            try:
+                if chart_type == "Bar" and y_ax != "None":
+                    st.plotly_chart(px.bar(plot_df, x=x_ax, y=y_ax, color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Scatter" and y_ax != "None":
+                    st.plotly_chart(px.scatter(plot_df, x=x_ax, y=y_ax, color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Histogram":
+                    st.plotly_chart(px.histogram(plot_df, x=x_ax, color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Box" and y_ax != "None":
+                    st.plotly_chart(px.box(plot_df, x=x_ax, y=y_ax, color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Violin" and y_ax != "None":
+                    st.plotly_chart(px.violin(plot_df, x=x_ax, y=y_ax, box=True, color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Treemap" and y_ax != "None":
+                    # Treemap uses x_ax and y_ax as hierarchical paths
+                    st.plotly_chart(px.treemap(plot_df, path=[x_ax, y_ax], color_discrete_sequence=colors), use_container_width=True)
+                elif chart_type == "Sunburst" and y_ax != "None":
+                    st.plotly_chart(px.sunburst(plot_df, path=[x_ax, y_ax], color_discrete_sequence=colors), use_container_width=True)
+                else:
+                    st.warning(f"Please select a valid Y-Axis / Path 2 for a {chart_type} chart.")
+
+                # Add Statistical Context (Mitigate Over-reliance on Aesthetics)
+                if y_ax != "None":
+                    with st.expander(f"📊 Statistical Context for {x_ax} & {y_ax} (IJCDS Best Practice)", expanded=False):
+                        stats_df = df[[x_ax, y_ax]].describe(include='all')
+                        st.dataframe(stats_df)
+                        st.caption("Review these exact numbers to confirm the visual representation is accurate and not logically misleading.")
+                else:
+                    with st.expander(f"📊 Statistical Context for {x_ax} (IJCDS Best Practice)", expanded=False):
+                        stats_df = df[[x_ax]].describe(include='all')
+                        st.dataframe(stats_df)
+            except Exception as e:
+                st.error(f"Could not generate {chart_type} chart with those columns. ({str(e)})")
                 
         st.divider()
         st.markdown("### 🤖 AI Recommended Charts")
@@ -417,12 +677,16 @@ with tab4:
                     {schema_str}
                     
                     Suggest 3 insightful Plotly Express charts to visualize this data. 
-                    Format your response as a numbered list with the chart title, the Plotly function to use (px.scatter, px.histogram, etc.), and the exact x and y column names from the schema.
+                    Format your response as a numbered list with the chart title, the Plotly function to use (px.scatter, px.histogram, px.treemap, px.sunburst, px.violin, etc.), and the exact x and y column names from the schema.
                     
-                    CRITICAL: Additionally, provide a brief "Why this chart?" rationale for each to improve data literacy (Best Practice 14).
+                    CRITICAL (IJCDS Best Practices):
+                    1. Avoid oversimplification: Suggest at least one advanced chart type (Treemap, Sunburst, or Violin) if the schema supports it.
+                    2. Interpretability: Ensure you mention adding clear `title` and axis `labels` to prevent misleading data.
+                    3. Data Literacy (Best Practice 14): Provide a brief "Why this chart?" rationale for each.
                     """
                     try:
                         text, used_model = safe_ai_call(prompt)
+                        st.warning("⚠️ **AI Provenance Disclaimer:** These charts are generated by AI. Always validate the underlying data to prevent logical errors or AI hallucinations before making business decisions. (IJCDS Section 7.B)", icon="⚠️")
                         st.markdown(text)
                         st.caption(f"Powered by `{used_model}` | How useful were these suggestions?")
                         col_fb1, col_fb2, _ = st.columns([1,1,10])
@@ -432,6 +696,34 @@ with tab4:
                             st.button("👎 Not Useful")
                     except Exception as e:
                         st.error(str(e))
+
+        st.divider()
+        st.markdown("### 🔍 Semantic Search (RAG Lite Concept)")
+        st.caption("Search for data by meaning or concept, not just exact keywords. (Industry Trend 2026)")
+        search_query = st.text_input("Describe what you are looking for (e.g., 'high end electronics' or 'cheap accessories')")
+        
+        if search_query:
+            with st.spinner("Searching semantically..."):
+                # RAG Lite: We use the LLM to rank the best matching categories or products 
+                # based on the user's natural language query.
+                search_prompt = f"""
+                The user is looking for: "{search_query}"
+                Available columns and sample values: {df.head(5).to_dict()}
+                
+                Write a DuckDB SQL SELECT query that finds the most relevant rows. Use LIKE or filter logic that best matches the intent of "{search_query}".
+                Focus on the most descriptive text columns. 
+                ONLY return the SQL query, nothing else.
+                """
+                try:
+                    suggested_sql, _ = safe_ai_call(search_prompt)
+                    # Clean the SQL from potential markdown wrapper
+                    suggested_sql = suggested_sql.replace("```sql", "").replace("```", "").strip()
+                    
+                    st.info(f"AI-driven Semantic Filter applied: `{suggested_sql}`")
+                    search_results = conn.execute(suggested_sql).df()
+                    st.dataframe(search_results)
+                except Exception as e:
+                    st.error(f"Semantic search failed: {e}")
 
 # ------------------------------------------
 # Tab 5: Export Pipeline (Reproducibility)
@@ -479,7 +771,7 @@ with tab1b:
     if st.session_state.current_table is None:
         st.info("Please load data in the 'Data Ingestion' tab first.")
     else:
-        df = st.session_state.df_preview
+        df = cast(pd.DataFrame, st.session_state.df_preview)
         
         # Best Practice 2: Limit Executive Dashboards to 5–7 Core KPIs
         st.subheader("Core KPIs")
@@ -492,7 +784,8 @@ with tab1b:
         # KPI 1: Total Volume
         with kpi_cols[0]:
             try:
-                total_rows = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()[0]
+                res = conn.execute(f"SELECT COUNT(*) FROM {st.session_state.current_table}").fetchone()
+                total_rows = res[0] if res else 0
                 st.metric(label="Total Records Processed", value=f"{total_rows:,}", help="Total volume of data in the current analytic dataset.")
             except Exception:
                 st.metric(label="Total Records", value=f"{len(df):,}")

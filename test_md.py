@@ -1,4 +1,9 @@
+# Copyright (c) 2026 Satvik Shrivastava. All rights reserved.
+# This work is the property of Satvik Shrivastava.
+# Unauthorized copying, modification, or distribution is strictly prohibited.
+
 import duckdb
+
 import os
 import toml
 

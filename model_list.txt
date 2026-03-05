@@ -1,4 +1,9 @@
+# Copyright (c) 2026 Satvik Shrivastava. All rights reserved.
+# This work is the property of Satvik Shrivastava.
+# Unauthorized copying, modification, or distribution is strictly prohibited.
+
 models/gemini-2.5-flash
+
 models/gemini-2.5-pro
 models/gemini-2.0-flash
 models/gemini-2.0-flash-001
