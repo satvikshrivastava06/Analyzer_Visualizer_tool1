@@ -12,3 +12,6 @@ pygwalker
 numpy
 groq
 altair
+st-aggrid
+streamlit-echarts
+streamlit-extras
