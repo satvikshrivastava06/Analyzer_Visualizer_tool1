@@ -11,3 +11,4 @@ google-generativeai
 pygwalker
 numpy
 groq
+altair
