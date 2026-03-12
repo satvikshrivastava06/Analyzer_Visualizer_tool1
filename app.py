@@ -255,7 +255,7 @@ st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash
 # ==========================================
 # UI Layout: Tabs
 # ==========================================
-tab1, tab1b, tab_etl, tab_forecasting, tab_journalist, tab2, tab2b, tab3, tab4, tab_pyg, tab_altair, tab_echarts, tab5 = st.tabs([
+tab1, tab_etl, tab_forecasting, tab_journalist, tab1b, tab2, tab3, tab4, tab_pyg, tab_altair, tab_echarts, tab5 = st.tabs([
     "📥 Data Ingestion", 
     "⚙️ ETL / Pipelines",
     "🔮 Forecasting Lab",
@@ -454,6 +454,52 @@ with tab1:
                 # If the DuckDB session doesn't have the table registered (e.g. after a reload),
                 # fall back gracefully to counting the preview dataframe
                 st.caption(f"Total Rows in Engine: {len(st.session_state.df_preview)}")
+
+# ------------------------------------------
+# Tab: ETL / Pipelines (dbt & Airbyte Style)
+# ------------------------------------------
+with tab_etl:
+    st.header("⚙️ Data ETL / Transformation Pipelines")
+    st.markdown("Automate data movement and transformation using SQL and API connectors. (Modern Data Stack Implementation)")
+    
+    etl_sub1, etl_sub2 = st.tabs(["🏗️ dbt-Style Modeling", "🔌 Connector Lab"])
+    
+    with etl_sub1:
+        st.subheader("DuckDB SQL Modeling (dbt-Lite)")
+        model_sql = st.text_area("Write transformation SQL (e.g., CREATE TABLE cleaned_revenue AS...)", 
+                                 value="-- Example Model\nSELECT \n  Product, \n  SUM(Revenue) as Total_Revenue \nFROM current_data \nGROUP BY 1", height=150)
+        
+        if st.button("🚀 Run Model"):
+            with st.spinner("Executing transformation..."):
+                try:
+                    conn.execute(model_sql)
+                    st.success("Model successfully created in DuckDB!")
+                    log_version_action("ETL Modeling", model_sql, "dbt-style SQL transformation executed.")
+                except Exception as e:
+                    st.error(f"ETL Error: {e}")
+                    
+    with etl_sub2:
+        st.subheader("API Ingestion (Airbyte-Lite)")
+        st.markdown("Pull data from external sources directly into your analytics engine.")
+        connector = st.selectbox("Select Source Connector", ["GitHub Repo Stars", "Google Search Console (Mock)", "Stripe Payments (Mock)"])
+        repo = st.text_input("Repository (e.g., 'duckdb/duckdb')", value="streamlit/streamlit")
+        
+        if st.button("🔌 Run Ingestion"):
+            with st.spinner(f"Ingesting from {connector}..."):
+                if connector == "GitHub Repo Stars":
+                    try:
+                        api_url = f"https://api.github.com/repos/{repo}"
+                        response = requests.get(api_url)
+                        data = response.json()
+                        ingest_df = pd.DataFrame([data])
+                        conn.execute("CREATE OR REPLACE TABLE raw_github_data AS SELECT * FROM ingest_df")
+                        st.dataframe(ingest_df)
+                        st.success(f"Successfully ingested metadata for {repo}!")
+                        log_version_action("API Ingestion", f"Fetch {repo}", "Airbyte-style GitHub ingestion.")
+                    except Exception as e:
+                        st.error(f"Ingestion failed: {e}")
+                else:
+                    st.info(f"The {connector} connector is currently in beta. Please check back soon!")
 
 # ------------------------------------------
 # Tab 2: Smart Clean (Automated Profiling)
