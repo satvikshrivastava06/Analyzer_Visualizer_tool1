@@ -8,5 +8,6 @@ pandas
 duckdb
 plotly
 google-generativeai
+pygwalker
 numpy
 groq
