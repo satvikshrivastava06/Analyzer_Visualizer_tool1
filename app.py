@@ -11,7 +11,20 @@ import google.generativeai as genai # type: ignore
 import os
 import json
 import numpy as np
+import glob
+import zipfile
 from typing import Any, cast
+import pygwalker.api as pyg
+import streamlit.components.v1 as components
+import altair as alt
+import requests
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from streamlit_echarts import st_echarts
+from streamlit_extras.add_vertical_space import add_vertical_space
+from streamlit_extras.stylable_container import stylable_container
+from streamlit_extras.copy_to_clipboard import copy_to_clipboard
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
 
 # ==========================================
 # Configuration & Setup
@@ -25,6 +38,24 @@ pio.templates.default = "plotly_white"
 
 # Best Practice 7: Use Color Strategically
 BRAND_COLORS = ["#00B8D9", "#36B37E", "#FF5630", "#FFAB00", "#6554C0"]
+
+# --- FiveThirtyEight Signature Style ---
+F38_COLOR_RED = "#ED1C24"
+F38_COLOR_BLUE = "#008FD5"
+F38_COLOR_BG = "#F0F0F0"
+F38_COLOR_GRID = "#D7D7D7"
+
+def apply_538_style(fig):
+    fig.update_layout(
+        plot_bgcolor=F38_COLOR_BG,
+        paper_bgcolor=F38_COLOR_BG,
+        font=dict(family="Helvetica, Arial, sans-serif", size=14, color="#333333"),
+        title=dict(font=dict(size=24, color="#333333"), x=0.05),
+        xaxis=dict(gridcolor=F38_COLOR_GRID, linecolor=F38_COLOR_GRID, showline=True),
+        yaxis=dict(gridcolor=F38_COLOR_GRID, linecolor=F38_COLOR_GRID, showline=True),
+        legend=dict(bgcolor="rgba(255,255,255,0.5)")
+    )
+    return fig
 
 st.set_page_config(page_title="Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash Kamal Koshti and Vansh Dhakad )", page_icon="🧠", layout="wide")
 
@@ -183,6 +214,10 @@ if 'df_preview' not in st.session_state:
 
 if 'version_history' not in st.session_state:
     st.session_state.version_history = []
+if 'ai_recommendations' not in st.session_state:
+    st.session_state.ai_recommendations = []
+if 'generated_rec_charts' not in st.session_state:
+    st.session_state.generated_rec_charts = {}
 
 # Best Practice 13: Integrate Governance/Lineage in UI Layer
 with st.sidebar:
@@ -221,20 +256,92 @@ st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash
 # ==========================================
 # UI Layout: Tabs
 # ==========================================
-tab1, tab1b, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab1b, tab_etl, tab_forecasting, tab_journalist, tab2, tab2b, tab3, tab4, tab_pyg, tab_altair, tab_echarts, tab5 = st.tabs([
     "📥 Data Ingestion", 
+    "⚙️ ETL / Pipelines",
+    "🔮 Forecasting Lab",
+    "🎲 Journalist Lab",
     "📈 Executive Summary",
     "🧹 Smart Clean", 
     "🤖 AI Assistant", 
     "📊 Generative Viz", 
+    "🔀 PyGWalker (Advanced BI)",
+    "📈 Altair Insights",
+    "💎 Premium Viz (ECharts)",
     "💾 Export Options"
 ])
+
+# Helper: AI Schema Insights
+def get_ai_missions(df_sample):
+    if not (gemini_key or groq_key):
+        return []
+    
+    schema = df_sample.dtypes.to_string()
+    prompt = f"""
+    Analyze this dataset schema and suggest 3 high-value "Analysis Missions" for a data scientist.
+    Schema:
+    {schema}
+    
+    Return ONLY a JSON array of strings, where each string is a concise mission title.
+    Example: ["Analyze Survival Price Correlation", "Predict Passenger Surivival", "Segment Users by Fare Paid"]
+    """
+    try:
+        raw, _ = safe_ai_call(prompt)
+        clean = raw.strip().replace("```json", "").replace("```", "")
+        return json.loads(clean)
+    except:
+        return []
 
 # ------------------------------------------
 # Tab 1: Data Ingestion (Scalable loading)
 # ------------------------------------------
 with tab1:
     st.header("Upload or Query Data")
+    
+    # --- New: Dataset Hub (Local Explorer) ---
+    st.subheader("📦 Dataset Hub (Local Library)")
+    dataset_path = "Datasets"
+    local_files = glob.glob(os.path.join(dataset_path, "*.csv")) + glob.glob(os.path.join(dataset_path, "*.csv.zip"))
+    
+    if local_files:
+        file_names = {os.path.basename(f): f for f in local_files}
+        selected_file_name = st.selectbox("Select local dataset:", list(file_names.keys()), key="hub_selector")
+        
+        if st.button("🚀 Load from Hub"):
+            full_path = file_names[selected_file_name]
+            with st.spinner(f"Ingesting {selected_file_name}..."):
+                try:
+                    target_csv = full_path
+                    # Handle ZIP extraction if needed
+                    if full_path.endswith(".zip"):
+                        with zipfile.ZipFile(full_path, 'r') as zip_ref:
+                            # Extract to a temp directory inside Datasets
+                            extract_path = os.path.join(dataset_path, "extracted_tmp")
+                            zip_ref.extractall(extract_path)
+                            # Find the main CSV inside (first one found)
+                            extracted_csvs = glob.glob(os.path.join(extract_path, "**", "*.csv"), recursive=True)
+                            if extracted_csvs:
+                                target_csv = extracted_csvs[0]
+                            else:
+                                st.error("No CSV found inside the ZIP file.")
+                                st.stop()
+                    
+                    # Load into DuckDB
+                    conn.execute(f"CREATE OR REPLACE VIEW current_data AS SELECT * FROM read_csv_auto('{target_csv.replace('\\', '/')}')")
+                    st.session_state.current_table = "current_data"
+                    df = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                    st.session_state.df_preview = df
+                    st.success(f"Successfully loaded `{selected_file_name}`!")
+                    
+                    # Trigger AI Insights
+                    st.session_state.ai_missions = get_ai_missions(df.head(20))
+                except Exception as e:
+                    st.error(f"Failed to load dataset: {e}")
+    else:
+        st.info("No local datasets found in the `Datasets` folder.")
+    
+    st.divider()
+
     st.markdown("""
     Load data directly into DuckDB. For large files, use the upload feature to process out-of-core.
     """)
@@ -254,8 +361,10 @@ with tab1:
                         # Define as a view for consistent access
                         conn.execute(f"CREATE OR REPLACE VIEW current_data AS SELECT * FROM {db_name}.main.{selected_table}")
                         st.session_state.current_table = "current_data"
-                        st.session_state.df_preview = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                        df = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                        st.session_state.df_preview = df
                         st.success(f"Successfully loaded `{selected_table}`!")
+                        st.session_state.ai_missions = get_ai_missions(df.head(20))
                     except Exception as e:
                         st.error(f"Error loading table: {e}")
         else:
@@ -279,8 +388,10 @@ with tab1:
                 try:
                     conn.execute(f"CREATE OR REPLACE VIEW current_data AS {query}")
                     st.session_state.current_table = "current_data"
-                    st.session_state.df_preview = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                    df = conn.execute("SELECT * FROM current_data LIMIT 1000").df()
+                    st.session_state.df_preview = df
                     log_version_action("Custom SQL Query", query, "Manual SQL executed in editor.")
+                    st.session_state.ai_missions = get_ai_missions(df.head(20))
                     st.success("Query executed successfully!")
                 except Exception as e:
                     st.error(f"Query Error: {e}")
@@ -312,10 +423,24 @@ with tab1:
             st.session_state.current_table = "current_data"
             st.session_state.df_preview = demo_df
             st.success("Dummy data loaded successfully!")
+            st.session_state.ai_missions = get_ai_missions(demo_df.head(20))
 
         if st.session_state.df_preview is not None:
-            st.subheader("Data Preview (First 1000 rows)")
-            st.dataframe(st.session_state.df_preview)
+            st.subheader("Interactive Data Explorer (AgGrid)")
+            gb = GridOptionsBuilder.from_dataframe(st.session_state.df_preview)
+            gb.configure_pagination(paginationAutoPageSize=True)
+            gb.configure_side_bar()
+            gb.configure_default_column(groupable=True, value=True, enableRowGroup=True, aggFunc='sum', editable=True)
+            gridOptions = gb.build()
+            
+            AgGrid(
+                st.session_state.df_preview,
+                gridOptions=gridOptions,
+                update_mode=GridUpdateMode.MODEL_CHANGED,
+                data_return_mode='AS_INPUT',
+                theme='streamlit',
+                height=400
+            )
             
             # Get count safely - guard against CatalogException when table not in session
             try:
@@ -345,7 +470,17 @@ with tab2:
         col1, col2 = st.columns(2)
         with col1:
             st.write("**Numerical Summary**")
-            st.dataframe(df.describe())
+            with stylable_container(
+                key="summary_container",
+                css_styles="""
+                    {
+                        border: 1px solid rgba(28, 31, 46, 0.1);
+                        border-radius: 0.5rem;
+                        padding: calc(1em - 1px);
+                    }
+                """,
+            ):
+                st.dataframe(df.describe())
         with col2:
             st.write("**Missing Values (%)**")
             missing = (df.isnull().sum() / len(df)) * 100
@@ -509,6 +644,8 @@ with tab2:
                     dictionary, model_used = safe_ai_call(doc_prompt)
                     st.markdown("### 📘 AI Data Dictionary")
                     st.markdown(dictionary)
+                    # Assuming copy_to_clipboard is defined elsewhere or removed
+                    # copy_to_clipboard(dictionary, before_text="Copy Dictionary", after_text="Copied!")
                     st.caption(f"Generated by {model_used}. This documentation helps with long-term project maintainability.")
                 except Exception as e:
                     st.error(f"Could not generate dictionary: {e}")
@@ -530,8 +667,23 @@ with tab3:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
-
-        if prompt := st.chat_input("Ask a question about your data (e.g., 'What is the average fare amount?')"):
+        
+        # --- New: AI Missions Segment ---
+        if st.session_state.get("ai_missions"):
+            st.markdown("### 🎯 Suggested Analysis Missions")
+            cols = st.columns(len(st.session_state.ai_missions))
+            for i, mission in enumerate(st.session_state.ai_missions):
+                if cols[i].button(f"🚀 {mission}", key=f"mission_{i}"):
+                    st.session_state.ai_chat_prompt = f"Conduct a detailed analysis for this mission: {mission}"
+        
+        prompt = st.chat_input("Ask a question or request a transformation (e.g., 'Filter for high Revenue rows')")
+        
+        # Use mission prompt if selected
+        if st.session_state.get("ai_chat_prompt") and not prompt:
+            prompt = st.session_state.ai_chat_prompt
+            st.session_state.ai_chat_prompt = None # Clear it
+        
+        if prompt:
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -618,6 +770,8 @@ with tab4:
         
         st.markdown("### 📊 Interactive Visualizations (IJCDS Best Practices)")
         st.markdown("**1. Interpretability (Colorblind Safe)**")
+        # Assuming BRAND_COLORS is defined globally or imported
+        BRAND_COLORS = ["#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52"]
         use_colorblind = st.toggle("Use Colorblind-Safe Palette", value=False)
         colors = ["#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"] if use_colorblind else BRAND_COLORS
         
@@ -684,26 +838,74 @@ with tab4:
                     {schema_str}
                     
                     Suggest 3 insightful Plotly Express charts to visualize this data. 
-                    Format your response as a numbered list with the chart title, the Plotly function to use (px.scatter, px.histogram, px.treemap, px.sunburst, px.violin, etc.), and the exact x and y column names from the schema.
+                    Format your response ONLY as a JSON array of objects. 
+                    Each object MUST have these exact keys: "title", "chart_type", "x", "y", and "rationale".
+                    
+                    Possible values for "chart_type": "scatter", "bar", "histogram", "box", "violin", "treemap", "sunburst".
+                    Set "y" to null for histograms.
                     
                     CRITICAL (IJCDS Best Practices):
                     1. Avoid oversimplification: Suggest at least one advanced chart type (Treemap, Sunburst, or Violin) if the schema supports it.
-                    2. Interpretability: Ensure you mention adding clear `title` and axis `labels` to prevent misleading data.
-                    3. Data Literacy (Best Practice 14): Provide a brief "Why this chart?" rationale for each.
+                    2. Rationale: Briefly explain why this chart is effective for this specific data structure.
                     """
                     try:
-                        text, used_model = safe_ai_call(prompt)
-                        st.warning("⚠️ **AI Provenance Disclaimer:** These charts are generated by AI. Always validate the underlying data to prevent logical errors or AI hallucinations before making business decisions. (IJCDS Section 7.B)", icon="⚠️")
-                        st.markdown(text)
-                        st.caption(f"Powered by `{used_model}` | How useful were these suggestions?")
-                        col_fb1, col_fb2, _ = st.columns([1,1,10])
-                        with col_fb1:
-                            st.button("👍 Useful")
-                        with col_fb2:
-                            st.button("👎 Not Useful")
+                        import json
+                        raw_response, used_model = safe_ai_call(prompt)
+                        
+                        # Handle potential markdown wrapping (```json ... ```)
+                        clean_json = raw_response.strip().replace("```json", "").replace("```", "")
+                        st.session_state.ai_recommendations = json.loads(clean_json)
+                        st.session_state.last_rec_model = used_model
                     except Exception as e:
-                        st.error(str(e))
+                        st.error(f"Could not parse AI recommendations: {e}")
 
+            if st.session_state.ai_recommendations:
+                st.warning("⚠️ **AI Provenance Disclaimer:** These suggestions are generated by AI. Always validate the underlying data. (IJCDS Section 7.B)", icon="⚠️")
+                
+                for i, rec in enumerate(st.session_state.ai_recommendations):
+                    with st.expander(f"Recommendation {i+1}: {rec['title']}", expanded=True):
+                        st.write(f"**Rationale:** {rec['rationale']}")
+                        st.caption(f"Config: {rec['chart_type']} | X: {rec['x']} | Y: {rec['y']}")
+                        
+                        rec_key = f"rec_chart_{i}"
+                        if st.button(f"Generate '{rec['title']}'", key=f"btn_{i}"):
+                            st.session_state.generated_rec_charts[rec_key] = True
+                        
+                        if st.session_state.generated_rec_charts.get(rec_key):
+                            try:
+                                r_type = rec['chart_type'].lower()
+                                r_x = rec['x']
+                                r_y = rec['y']
+                                r_title = rec['title']
+                                
+                                fig = None
+                                if r_type == "scatter":
+                                    fig = px.scatter(df, x=r_x, y=r_y, title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "bar":
+                                    fig = px.bar(df, x=r_x, y=r_y, title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "histogram":
+                                    fig = px.histogram(df, x=r_x, title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "box":
+                                    fig = px.box(df, x=r_x, y=r_y, title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "violin":
+                                    fig = px.violin(df, x=r_x, y=r_y, box=True, title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "treemap":
+                                    fig = px.treemap(df, path=[r_x, r_y] if r_y else [r_x], title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                elif r_type == "sunburst":
+                                    fig = px.sunburst(df, path=[r_x, r_y] if r_y else [r_x], title=r_title, color_discrete_sequence=BRAND_COLORS)
+                                
+                                if fig:
+                                    st.plotly_chart(fig, use_container_width=True)
+                            except Exception as e:
+                                st.error(f"Chart generation failed: {e}")
+                
+                st.caption(f"Powered by `{st.session_state.get('last_rec_model', 'AI Model')}`")
+                col_fb1, col_fb2, _ = st.columns([1,1,10])
+                with col_fb1:
+                    st.button("👍 Useful", key="useful_main")
+                with col_fb2:
+                    st.button("👎 Not Useful", key="not_useful_main")
+        
         st.divider()
         st.markdown("### 🔍 Semantic Search (RAG Lite Concept)")
         st.caption("Search for data by meaning or concept, not just exact keywords. (Industry Trend 2026)")
@@ -731,6 +933,148 @@ with tab4:
                     st.dataframe(search_results)
                 except Exception as e:
                     st.error(f"Semantic search failed: {e}")
+
+# ------------------------------------------
+# Tab PyGWalker: Advanced Drag and Drop BI
+# ------------------------------------------
+with tab_pyg:
+    st.header("🔀 Advanced Business Intelligence (Drag & Drop)")
+    st.markdown("Build Tableau-style visualizations instantly using an interactive canvas. Drag fields to shelves, change mark types, and explore your data visually.")
+    
+    if st.session_state.current_table is None:
+        st.info("Please load data in the 'Data Ingestion' tab first.")
+    else:
+        df = cast(pd.DataFrame, st.session_state.df_preview)
+        
+        # PyGWalker needs a pandas dataframe
+        # We use a unique theme to match Streamlit's typical dark/light look
+        try:
+            with st.spinner("Initializing PyGWalker engine..."):
+                # Generate HTML object 
+                walker = pyg.walk(df, return_html=True, spec="cfg.json")
+                # Render using Streamlit components
+                components.html(walker, height=800, scrolling=True)
+            st.caption("Powered by PyGWalker. Note: Very large datasets (> 100k rows) may slow down the browser in this view.")
+        except Exception as e:
+            st.error(f"Could not load PyGWalker: {e}")
+
+# ------------------------------------------
+# Tab Altair: Declarative Statistical Viz
+# ------------------------------------------
+with tab_altair:
+    st.header("📈 Declarative Statistical Insights (Altair)")
+    st.markdown("Altair provides a grammar-of-graphics approach for sophisticated statistical charts. Use the brush tool to interactively filter and explore relationships between variables.")
+    
+    if st.session_state.current_table is None:
+        st.info("Please load data in the 'Data Ingestion' tab first.")
+    else:
+        df = cast(pd.DataFrame, st.session_state.df_preview)
+        
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+        
+        if len(num_cols) >= 2:
+            st.subheader("Interactive Multi-View Explorer")
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                x_alt = st.selectbox("X-Axis (Scatter)", num_cols, index=0, key="alt_x")
+            with col_a2:
+                y_alt = st.selectbox("Y-Axis (Scatter)", num_cols, index=min(1, len(num_cols)-1), key="alt_y")
+            
+            color_alt = st.selectbox("Color Segment", ["None"] + cat_cols, key="alt_color")
+            
+            # --- Altair Chart Construction ---
+            brush = alt.selection_interval()
+            
+            base = alt.Chart(df).encode(
+                color=alt.Color(f'{color_alt}:N', scale=alt.Scale(range=BRAND_COLORS)) if color_alt != "None" else alt.value(BRAND_COLORS[0])
+            ).add_params(brush)
+            
+            # Main Scatter
+            scatter = base.mark_point(filled=True, size=60).encode(
+                x=alt.X(x_alt),
+                y=alt.Y(y_alt),
+                tooltip=df.columns.tolist()
+            ).properties(width=500, height=400)
+            
+            # Histogram for X axis selection influence
+            bars = base.mark_bar().encode(
+                x='count()',
+                y=alt.Y(f'{color_alt}:N').title("Segment") if color_alt != "None" else alt.value("Total")
+            ).transform_filter(brush).properties(width=500, height=150)
+            
+            st.altair_chart(scatter & bars, use_container_width=True)
+            st.caption("💡 **Tip:** Click and drag on the scatter plot to select a region. The bar chart below will dynamically update to show the distribution of the selected points.")
+        else:
+            st.warning("At least two numerical columns are required for Altair Interactive insights.")
+
+# ------------------------------------------
+# Tab ECharts: Premium Visualizations
+# ------------------------------------------
+with tab_echarts:
+    st.header("💎 Premium Visualizations (ECharts)")
+    st.markdown("ECharts offers highly performant, animated, and sophisticated visualizations. Below is a dynamic distribution gauge for your primary numerical column.")
+    
+    if st.session_state.current_table is None:
+        st.info("Please load data in the 'Data Ingestion' tab first.")
+    else:
+        df = cast(pd.DataFrame, st.session_state.df_preview)
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if num_cols:
+            gauge_col = st.selectbox("Select Target for Gauge", num_cols, key="echart_gauge")
+            val = float(df[gauge_col].mean())
+            max_val = float(df[gauge_col].max())
+            
+            options = {
+                "tooltip": {"formatter": "{a} <br/>{b} : {c}%"},
+                "series": [
+                    {
+                        "name": "Mean Value",
+                        "type": "gauge",
+                        "max": max_val,
+                        "detail": {"formatter": "{value}"},
+                        "data": [{"value": round(val, 2), "name": "Mean"}],
+                        "axisLine": {
+                            "lineStyle": {
+                                "color": [
+                                    [0.3, "#36B37E"],
+                                    [0.7, "#FFAB00"],
+                                    [1, "#FF5630"],
+                                ],
+                                "width": 30,
+                            }
+                        },
+                    }
+                ],
+            }
+            st_echarts(options=options, height="500px")
+            
+            # Sunburst Example if Category/Product exist
+            if 'Category' in df.columns and 'Product' in df.columns:
+                st.subheader("Category-Product Sunburst")
+                # Prepare data for sunburst
+                sun_data = []
+                categories = df['Category'].dropna().unique().tolist()
+                for cat in categories:
+                    children = []
+                    cat_df = df[df['Category'] == cat]
+                    prods = cat_df['Product'].dropna().unique().tolist()
+                    for prod in prods:
+                        children.append({"name": prod, "value": float(cat_df[cat_df['Product'] == prod]['Revenue'].sum())})
+                    sun_data.append({"name": cat, "children": children})
+                
+                sun_options = {
+                    "series": {
+                        "type": "sunburst",
+                        "data": sun_data,
+                        "radius": [0, "90%"],
+                        "label": {"rotate": "radial"},
+                    }
+                }
+                st_echarts(options=sun_options, height="600px")
+        else:
+            st.warning("No numerical columns found for ECharts.")
 
 # ------------------------------------------
 # Tab 5: Export Pipeline (Reproducibility)
@@ -765,8 +1109,168 @@ print("Pipeline finished successfully! Shape:", df.shape)
     st.code(script_template, language="python")
     st.download_button("Download Script (reproducible_analysis.py)", script_template, file_name="reproducible_analysis.py")
     
-    req_txt = "streamlit\npandas\nduckdb\nplotly\ngoogle-generativeai\nnumpy"
+    req_txt = "streamlit\npandas\nduckdb==1.4.4\nplotly\ngoogle-generativeai\nnumpy\npygwalker\ngroq\naltair\nstreamlit-aggrid\nstreamlit-echarts\nstreamlit-extras\ndbt-duckdb\nrequests\nscikit-learn"
     st.download_button("Download dependencies (requirements.txt)", req_txt, file_name="session_requirements.txt", help="Download the Python requirements needed to run the exported pipeline.")
+
+# Quality of Life: Back to Top
+add_vertical_space(5)
+st.button("⬆️ Back to Top", on_click=lambda: st.write('<style>div.block-container{padding-top:2rem;}</style>', unsafe_allow_html=True))
+
+# ------------------------------------------
+# Tab: Forecasting Lab (ML Training)
+# ------------------------------------------
+with tab_forecasting:
+    st.header("🔮 Forecasting Lab")
+    st.markdown("Training AI models on historical data to predict future trends. (Best Practice 15: Predictive Governance)")
+    
+    pop_csv = "population-with-un-projections/population-with-un-projections.csv"
+    if not os.path.exists(pop_csv):
+        st.error(f"Dataset not found at {pop_csv}. Please ensure the folder structure is correct.")
+    else:
+        # Load and cache data
+        @st.cache_data
+        def load_pop_data():
+            df = pd.read_csv(pop_csv)
+            # Shorten column names for easier access
+            df.columns = ["Entity", "Code", "Year", "Pop_Estimate", "Pop_Medium_Proj"]
+            return df
+
+        pop_df = load_pop_data()
+        entities = sorted(pop_df['Entity'].unique().tolist())
+        selected_entity = st.selectbox("Select Country/Region to Analyze", entities, index=entities.index("World") if "World" in entities else 0)
+        
+        entity_df = pop_df[pop_df['Entity'] == selected_entity].copy()
+        hist_df = entity_df[entity_df['Pop_Estimate'].notna()]
+        proj_df = entity_df[entity_df['Pop_Medium_Proj'].notna()]
+        
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.metric("Historical Data Points", len(hist_df))
+        with col_m2:
+            st.metric("Expert Projection Span", f"{proj_df['Year'].min()} - {proj_df['Year'].max()}")
+
+        st.subheader("🤖 AI Training Engine")
+        poly_degree = st.slider("Polynomial Complexity (Degree)", 1, 4, 2, help="Higher degree allows for more complex curves, but may overfit.")
+        
+        if st.button("🚀 Train & Predict 2100"):
+            with st.spinner(f"Training ML model for {selected_entity}..."):
+                # Prepare data
+                X = hist_df[['Year']].values
+                y = hist_df['Pop_Estimate'].values
+                
+                # Polynomial Regression
+                poly = PolynomialFeatures(degree=poly_degree)
+                X_poly = poly.fit_transform(X)
+                model = LinearRegression()
+                model.fit(X_poly, y)
+                
+                # Predict up to 2100
+                future_years = np.arange(1950, 2101).reshape(-1, 1)
+                future_X_poly = poly.transform(future_years)
+                predictions = model.predict(future_X_poly)
+                
+                pred_df = pd.DataFrame({
+                    "Year": future_years.flatten(),
+                    "AI_Prediction": predictions
+                })
+                
+                # Merge for comparison
+                viz_df = pd.merge(entity_df, pred_df, on="Year", how="outer")
+                
+                # Visualization
+                fig = go.Figure()
+                # 1. Historical
+                fig.add_trace(go.Scatter(x=hist_df['Year'], y=hist_df['Pop_Estimate'], name="Historical (Actual)", mode='markers', marker=dict(color='#00B8D9')))
+                # 2. UN Projection
+                fig.add_trace(go.Scatter(x=proj_df['Year'], y=proj_df['Pop_Medium_Proj'], name="UN Medium Projection", line=dict(color='#36B37E', dash='dash')))
+                # 3. AI Prediction
+                fig.add_trace(go.Scatter(x=pred_df['Year'], y=pred_df['AI_Prediction'], name=f"AI ML Forecast (Deg {poly_degree})", line=dict(color='#FF5630', width=3)))
+                
+                fig.update_layout(title=f"Population Forecast Comparison: {selected_entity}", xaxis_title="Year", yaxis_title="Population", template="plotly_white")
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # AI Comparison Summary
+                un_2100 = proj_df[proj_df['Year'] == 2100]['Pop_Medium_Proj'].values[0]
+                ai_2100 = predictions[-1]
+                diff = ((ai_2100 - un_2100) / un_2100) * 100
+                
+                st.markdown(f"### 📊 Insight: The 'Divergence' Gap")
+                st.write(f"By the year **2100**, the UN predicts a population of **{un_2100:,.0f}**, while your AI model predicts **{ai_2100:,.0f}**.")
+                st.info(f"The AI forecast is **{abs(diff):.1f}% {'higher' if diff > 0 else 'lower'}** than the expert UN projections. This suggests the recent growth trajectory {'exceeds' if diff > 0 else 'is more conservative than'} complex demographic modeling.")
+
+# ------------------------------------------
+# Tab: Journalist Lab (538 Style)
+# ------------------------------------------
+with tab_journalist:
+    st.header("🎲 Journalist Lab")
+    st.markdown("Authoritative, data-driven storytelling inspired by **FiveThirtyEight**. (Best Practice 16: Narrative Integrity)")
+    
+    j_sub1, j_sub2 = st.tabs(["🔗 538 Connector", "📈 Poll Aggregator (Smoothing)"])
+    
+    with j_sub1:
+        st.subheader("Connect to FiveThirtyEight Datasets")
+        st.markdown("Pull live assets from the `fivethirtyeight/data` GitHub repository.")
+        
+        dataset_options = {
+            "Presidential Polls (2020)": "https://raw.githubusercontent.com/fivethirtyeight/data/master/polls/presidential_polls.csv",
+            "NBA Elo Ratings": "https://raw.githubusercontent.com/fivethirtyeight/data/master/nba-elo/nbaallelo.csv",
+            "Trump Approval Ratings": "https://raw.githubusercontent.com/fivethirtyeight/data/master/trump-approval-ratings/approval_topline.csv"
+        }
+        
+        selected_j_ds = st.selectbox("Choose Dataset", list(dataset_options.keys()))
+        if st.button("🚀 Fetch & Ingest from 538"):
+            with st.spinner(f"Connecting to 538 Open Data..."):
+                try:
+                    url = dataset_options[selected_j_ds]
+                    df = pd.read_csv(url)
+                    conn.execute("CREATE OR REPLACE TABLE journalist_data AS SELECT * FROM df")
+                    st.session_state.current_table = "journalist_data"
+                    st.session_state.df_preview = df
+                    st.success(f"Successfully ingested {selected_j_ds} into DuckDB!")
+                except Exception as e:
+                    st.error(f"Ingestion failed: {e}")
+
+    with j_sub2:
+        st.subheader("Statistical Smoothing")
+        st.markdown("Apply rolling averages to noisy time-series data to reveal the 'true' trend.")
+        
+        if st.session_state.df_preview is None:
+            st.warning("Please load a dataset using the 538 Connector first.")
+        else:
+            df = st.session_state.df_preview
+            numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            time_cols = df.select_dtypes(include=['object', 'datetime']).columns.tolist()
+            
+            col_agg1, col_agg2, col_agg3 = st.columns(3)
+            with col_agg1:
+                x_axis = st.selectbox("Time Axis (X)", time_cols)
+            with col_agg2:
+                y_axis = st.selectbox("Value Axis (Y)", numerical_cols)
+            with col_agg3:
+                window = st.slider("Smoothing Window (Days/Obs)", 1, 30, 7)
+            
+            if st.button("📊 Generate 538-Style Analysis"):
+                try:
+                    # Rolling average
+                    df_sorted = df.sort_values(by=x_axis)
+                    df_sorted['smoothed'] = df_sorted[y_axis].rolling(window=window, center=True).mean()
+                    
+                    fig = go.Figure()
+                    # Raw data (faded)
+                    fig.add_trace(go.Scatter(x=df_sorted[x_axis], y=df_sorted[y_axis], name="Raw Model", mode='markers', marker=dict(color=F38_COLOR_BLUE, opacity=0.2)))
+                    # Smoothed trend
+                    fig.add_trace(go.Scatter(x=df_sorted[x_axis], y=df_sorted['smoothed'], name=f"{window}-Point Rolling Avg", line=dict(color=F38_COLOR_RED, width=4)))
+                    
+                    fig.update_layout(title=f"Narrative Trend Analysis: {y_axis}")
+                    fig = apply_538_style(fig)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.markdown("### 📰 Journalistic Commentary")
+                    prompt = f"Write a hard-hitting 538-style summary of this trend where {y_axis} is analyzed over {x_axis} with a {window}-point smoothing window. Use data-driven language."
+                    summary, _ = safe_ai_call(prompt)
+                    st.markdown(summary)
+                except Exception as e:
+                    st.error(f"Analysis failed: {e}")
 
 # ------------------------------------------
 # Tab 1b: Executive Summary (Best Practices 2, 8, 9)
