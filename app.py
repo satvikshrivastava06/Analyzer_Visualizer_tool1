@@ -49,9 +49,16 @@ except (FileNotFoundError, KeyError):
 
 # 2. Database Connection
 if 'db_conn' not in st.session_state:
-    import os
-    os.environ["MOTHERDUCK_TOKEN"] = md_token
-    st.session_state.db_conn = duckdb.connect(f'md:?motherduck_token={md_token}&db={db_name}')
+    try:
+        # Set environment variable for token-based authentication
+        os.environ["MOTHERDUCK_TOKEN"] = md_token
+        # Simplify connection: 'md:database_name' is more robust for direct auth
+        st.session_state.db_conn = duckdb.connect(f'md:{db_name}')
+        st.success(f"Connected to MotherDuck: {db_name}")
+    except Exception as e:
+        st.warning(f"MotherDuck connection failed: {e}. Falling back to local/in-memory engine.")
+        # Fallback to a local-only connection if MotherDuck is unreachable or tokens are invalid
+        st.session_state.db_conn = duckdb.connect(':memory:')
 
 conn = st.session_state.db_conn
 
