@@ -18,5 +18,6 @@ streamlit-extras
 dbt-duckdb
 requests
 scikit-learn
-ydata-profiling==4.12.2
+ydata-profiling
+setuptools==69.5.1
 pydantic-settings
