@@ -36,6 +36,77 @@ import plotly.graph_objects as go
 # Set a consistent, clean base template prioritizing clarity over complexity.
 pio.templates.default = "plotly_white"
 
+# ==========================================
+# Global Premium Dashboard CSS
+# ==========================================
+DASHBOARD_CSS = """
+<style>
+/* KPI Card styles */
+.kpi-card {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid rgba(99, 110, 250, 0.25);
+    border-radius: 16px;
+    padding: 20px 24px;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    margin-bottom: 8px;
+}
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 32px rgba(99, 110, 250, 0.3);
+}
+.kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+.kpi-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #818cf8 0%, #38bdf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+}
+.kpi-delta {
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 600;
+}
+.kpi-delta.positive { color: #34d399; }
+.kpi-delta.negative { color: #f87171; }
+.kpi-delta.neutral  { color: #94a3b8; }
+
+/* Section header */
+.dash-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #475569;
+    margin: 24px 0 12px 0;
+    padding-left: 4px;
+    border-left: 3px solid #818cf8;
+    padding-left: 12px;
+}
+
+/* Chart card wrapper */
+.chart-card {
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border: 1px solid rgba(99,110,250,0.15);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    margin-bottom: 16px;
+}
+</style>
+"""
+
 # Best Practice 7: Use Color Strategically
 BRAND_COLORS = ["#00B8D9", "#36B37E", "#FF5630", "#FFAB00", "#6554C0"]
 
@@ -256,7 +327,7 @@ st.title("🧠 Data Analyser and Visualiser Tool - ( By Satvik Shrivastava, Yash
 # ==========================================
 # UI Layout: Tabs
 # ==========================================
-tab1, tab_etl, tab_forecasting, tab_journalist, tab1b, tab2, tab3, tab4, tab_pyg, tab_altair, tab_echarts, tab5 = st.tabs([
+tab1, tab_etl, tab_forecasting, tab_journalist, tab1b, tab2, tab3, tab4, tab_pyg, tab_altair, tab_echarts, tab_dashboard, tab5 = st.tabs([
     "📥 Data Ingestion", 
     "⚙️ ETL / Pipelines",
     "🔮 Forecasting Lab",
@@ -268,6 +339,7 @@ tab1, tab_etl, tab_forecasting, tab_journalist, tab1b, tab2, tab3, tab4, tab_pyg
     "🔀 PyGWalker (Advanced BI)",
     "📈 Altair Insights",
     "💎 Premium Viz (ECharts)",
+    "🎨 Visual Dashboard",
     "💾 Export Options"
 ])
 
@@ -1140,6 +1212,330 @@ with tab_echarts:
                 st_echarts(options=sun_options, height="600px")
         else:
             st.warning("No numerical columns found for ECharts.")
+
+# ------------------------------------------
+# Tab Dashboard: Premium Visual Dashboard
+# ------------------------------------------
+with tab_dashboard:
+    st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
+    st.markdown("## 🎨 Visual Dashboard")
+    st.markdown("*Auto-generated Power BI-style analytics from your active dataset.*")
+
+    if st.session_state.current_table is None:
+        st.info("📥 Please load data in the **Data Ingestion** tab first to see your dashboard.")
+    else:
+        df = cast(pd.DataFrame, st.session_state.df_preview)
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+        date_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
+
+        # Try parsing date columns from object cols
+        for c in cat_cols:
+            try:
+                pd.to_datetime(df[c])
+                if df[c].astype(str).str.match(r'\d{4}').any():
+                    date_cols.append(c)
+            except Exception:
+                pass
+
+        DASH_COLORS = ["#818cf8", "#38bdf8", "#34d399", "#fb923c", "#e879f9",
+                       "#fbbf24", "#f87171", "#a3e635", "#22d3ee", "#c084fc"]
+
+        DARK_LAYOUT = dict(
+            paper_bgcolor="rgba(15,23,42,0)",
+            plot_bgcolor="rgba(15,23,42,0)",
+            font=dict(family="Inter, system-ui, sans-serif", size=13, color="#94a3b8"),
+            title_font=dict(size=16, color="#e2e8f0", family="Inter, sans-serif"),
+            legend=dict(
+                bgcolor="rgba(30,41,59,0.8)",
+                bordercolor="rgba(99,110,250,0.2)",
+                borderwidth=1,
+                font=dict(color="#94a3b8")
+            ),
+            xaxis=dict(
+                gridcolor="rgba(71,85,105,0.3)",
+                linecolor="rgba(71,85,105,0.4)",
+                tickfont=dict(color="#64748b")
+            ),
+            yaxis=dict(
+                gridcolor="rgba(71,85,105,0.3)",
+                linecolor="rgba(71,85,105,0.4)",
+                tickfont=dict(color="#64748b")
+            ),
+            margin=dict(l=16, r=16, t=48, b=16),
+        )
+
+        def apply_dark(fig):
+            fig.update_layout(**DARK_LAYOUT)
+            return fig
+
+        # ── Row 0: Dashboard Controls ─────────────────────────────
+        with st.expander("⚙️ Dashboard Controls", expanded=False):
+            ctrl1, ctrl2, ctrl3 = st.columns(3)
+            with ctrl1:
+                primary_num = st.selectbox("Primary Metric", num_cols, key="dash_primary_num") if num_cols else None
+            with ctrl2:
+                secondary_num = st.selectbox("Secondary Metric", [c for c in num_cols if c != primary_num], key="dash_sec_num") if len(num_cols) > 1 else None
+            with ctrl3:
+                primary_cat = st.selectbox("Category Column", cat_cols, key="dash_primary_cat") if cat_cols else None
+
+        if not num_cols:
+            st.warning("⚠️ Your dataset has no numerical columns. Please load a richer dataset.")
+        else:
+            primary_num = st.session_state.get("dash_primary_num") or num_cols[0]
+            secondary_num = st.session_state.get("dash_sec_num") or (num_cols[1] if len(num_cols) > 1 else num_cols[0])
+            primary_cat = st.session_state.get("dash_primary_cat") or (cat_cols[0] if cat_cols else None)
+
+            # ── Row 1: KPI Cards ────────────────────────────────────
+            st.markdown('<div class="dash-section-title">📊 Key Performance Indicators</div>', unsafe_allow_html=True)
+            kpi_cols = num_cols[:5]  # Up to 5 KPIs
+            kpi_card_cols = st.columns(len(kpi_cols))
+
+            for i, col_name in enumerate(kpi_cols):
+                series = df[col_name].dropna()
+                val = series.mean()
+                total = series.sum()
+                pct_change = ((series.iloc[-1] - series.iloc[0]) / abs(series.iloc[0]) * 100) if len(series) > 1 and series.iloc[0] != 0 else 0
+                delta_class = "positive" if pct_change >= 0 else "negative"
+                delta_symbol = "▲" if pct_change >= 0 else "▼"
+                fmt_val = f"{val:,.0f}" if abs(val) >= 1000 else f"{val:,.2f}"
+                fmt_total = f"{total:,.0f}" if abs(total) >= 1000 else f"{total:,.2f}"
+
+                with kpi_card_cols[i]:
+                    st.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-label">{col_name[:18]}</div>
+                        <div class="kpi-value">{fmt_val}</div>
+                        <div class="kpi-delta {delta_class}">{delta_symbol} {abs(pct_change):.1f}% trend</div>
+                        <div style="font-size:11px;color:#475569;margin-top:4px;">Σ {fmt_total}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.divider()
+
+            # ── Row 2: Two big charts ────────────────────────────────
+            st.markdown('<div class="dash-section-title">📈 Distribution & Comparison</div>', unsafe_allow_html=True)
+            r2c1, r2c2 = st.columns(2)
+
+            with r2c1:
+                # Bar chart: category vs primary metric
+                if primary_cat:
+                    agg = df.groupby(primary_cat)[primary_num].sum().reset_index().sort_values(primary_num, ascending=False).head(12)
+                    fig_bar = px.bar(
+                        agg, x=primary_cat, y=primary_num,
+                        title=f"{primary_num} by {primary_cat}",
+                        color=primary_num,
+                        color_continuous_scale=[[0, "#312e81"], [0.5, "#818cf8"], [1, "#38bdf8"]],
+                        text_auto=True
+                    )
+                    fig_bar.update_traces(textposition="outside", textfont_color="#94a3b8")
+                    fig_bar = apply_dark(fig_bar)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                else:
+                    fig_hist = px.histogram(df, x=primary_num, title=f"Distribution of {primary_num}",
+                                            nbins=30, color_discrete_sequence=["#818cf8"])
+                    fig_hist = apply_dark(fig_hist)
+                    st.plotly_chart(fig_hist, use_container_width=True)
+
+            with r2c2:
+                # Scatter: primary vs secondary with category color
+                if len(num_cols) >= 2:
+                    scatter_kwargs = dict(
+                        x=primary_num, y=secondary_num,
+                        title=f"{primary_num} vs {secondary_num}",
+                        color_discrete_sequence=DASH_COLORS
+                    )
+                    if primary_cat:
+                        scatter_kwargs["color"] = primary_cat
+                    fig_scatter = px.scatter(
+                        df.sample(min(len(df), 2000), random_state=42),
+                        **scatter_kwargs,
+                        opacity=0.75,
+                        size_max=12
+                    )
+                    fig_scatter.update_traces(marker=dict(line=dict(width=0.5, color="rgba(255,255,255,0.2)")))
+                    fig_scatter = apply_dark(fig_scatter)
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+
+            # ── Row 3: Treemap + Box/Violin ──────────────────────────
+            st.markdown('<div class="dash-section-title">🗂️ Hierarchical & Statistical Views</div>', unsafe_allow_html=True)
+            r3c1, r3c2 = st.columns(2)
+
+            with r3c1:
+                if primary_cat and len(cat_cols) >= 1:
+                    try:
+                        path_cols = cat_cols[:2] if len(cat_cols) >= 2 else cat_cols[:1]
+                        fig_tree = px.treemap(
+                            df.dropna(subset=[primary_num]),
+                            path=path_cols,
+                            values=primary_num,
+                            title=f"Treemap: {primary_num}",
+                            color=primary_num,
+                            color_continuous_scale=[[0, "#1e1b4b"], [0.5, "#6d28d9"], [1, "#e879f9"]]
+                        )
+                        fig_tree.update_layout(
+                            paper_bgcolor="rgba(15,23,42,0)",
+                            font=dict(color="#e2e8f0"),
+                            margin=dict(l=8, r=8, t=40, b=8)
+                        )
+                        st.plotly_chart(fig_tree, use_container_width=True)
+                    except Exception:
+                        st.info("Treemap requires valid hierarchical categorical columns.")
+                else:
+                    st.info("Load data with categorical columns to see the Treemap.")
+
+            with r3c2:
+                if primary_cat and len(num_cols) >= 1:
+                    try:
+                        groups = df[primary_cat].nunique()
+                        chart_cols = num_cols[:1]
+                        if groups <= 10:
+                            fig_box = px.violin(
+                                df.dropna(subset=chart_cols + [primary_cat]),
+                                x=primary_cat, y=chart_cols[0], box=True,
+                                color=primary_cat,
+                                color_discrete_sequence=DASH_COLORS,
+                                title=f"Distribution of {chart_cols[0]} by {primary_cat}",
+                                violinmode="overlay",
+                                points=False
+                            )
+                        else:
+                            fig_box = px.box(
+                                df.dropna(subset=chart_cols + [primary_cat]),
+                                x=primary_cat, y=chart_cols[0],
+                                color=primary_cat,
+                                color_discrete_sequence=DASH_COLORS,
+                                title=f"Box: {chart_cols[0]} by Category"
+                            )
+                        fig_box = apply_dark(fig_box)
+                        fig_box.update_layout(showlegend=False)
+                        st.plotly_chart(fig_box, use_container_width=True)
+                    except Exception as ex:
+                        st.info(f"Could not render violin/box: {ex}")
+                else:
+                    fig_hist2 = px.histogram(df, x=primary_num, title=f"Frequency: {primary_num}",
+                                             nbins=40, color_discrete_sequence=["#38bdf8"])
+                    fig_hist2 = apply_dark(fig_hist2)
+                    st.plotly_chart(fig_hist2, use_container_width=True)
+
+            # ── Row 4: Correlation Heatmap + Sunburst or Line ────────
+            st.markdown('<div class="dash-section-title">🔗 Correlation & Trends</div>', unsafe_allow_html=True)
+            r4c1, r4c2 = st.columns(2)
+
+            with r4c1:
+                if len(num_cols) >= 2:
+                    corr_df = df[num_cols[:8]].corr()
+                    fig_heat = go.Figure(data=go.Heatmap(
+                        z=corr_df.values,
+                        x=corr_df.columns.tolist(),
+                        y=corr_df.index.tolist(),
+                        colorscale=[[0, "#0f172a"], [0.25, "#312e81"], [0.5, "#6366f1"],
+                                    [0.75, "#818cf8"], [1, "#e0e7ff"]],
+                        zmin=-1, zmax=1,
+                        text=corr_df.round(2).values,
+                        texttemplate="%{text}",
+                        textfont=dict(size=11, color="white"),
+                        hovertemplate="%{y} × %{x}: %{z:.2f}<extra></extra>"
+                    ))
+                    fig_heat.update_layout(
+                        title="Correlation Matrix",
+                        **DARK_LAYOUT
+                    )
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                else:
+                    st.info("Need at least 2 numerical columns for correlation heatmap.")
+
+            with r4c2:
+                if primary_cat and num_cols:
+                    try:
+                        cat_counts = df[primary_cat].value_counts().head(10).reset_index()
+                        cat_counts.columns = [primary_cat, "count"]
+                        fig_pie = px.pie(
+                            cat_counts, values="count", names=primary_cat,
+                            title=f"{primary_cat} Composition",
+                            color_discrete_sequence=DASH_COLORS,
+                            hole=0.45
+                        )
+                        fig_pie.update_traces(
+                            textposition="outside",
+                            textinfo="label+percent",
+                            textfont_color="#94a3b8",
+                            marker=dict(line=dict(color="#0f172a", width=2))
+                        )
+                        fig_pie.update_layout(
+                            paper_bgcolor="rgba(15,23,42,0)",
+                            font=dict(color="#94a3b8"),
+                            legend=dict(font=dict(color="#94a3b8")),
+                            margin=dict(l=8, r=8, t=48, b=8)
+                        )
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    except Exception:
+                        st.info("Could not render donut chart.")
+                else:
+                    if len(num_cols) >= 2:
+                        fig_area = px.area(df.head(200), y=num_cols[:2],
+                                           title="Trend (first 200 rows)",
+                                           color_discrete_sequence=DASH_COLORS)
+                        fig_area = apply_dark(fig_area)
+                        st.plotly_chart(fig_area, use_container_width=True)
+
+            # ── Row 5: ECharts Gauge meters ──────────────────────────
+            st.markdown('<div class="dash-section-title">🎯 Live Metric Gauges</div>', unsafe_allow_html=True)
+            gauge_num_cols = num_cols[:3]
+            gcols = st.columns(len(gauge_num_cols))
+
+            for i, g_col in enumerate(gauge_num_cols):
+                g_val = float(df[g_col].mean())
+                g_max = float(df[g_col].max()) or 1.0
+                g_pct = min(g_val / g_max, 1.0)
+
+                gauge_opts = {
+                    "backgroundColor": "transparent",
+                    "series": [{
+                        "type": "gauge",
+                        "startAngle": 200,
+                        "endAngle": -20,
+                        "min": 0,
+                        "max": round(g_max, 2),
+                        "splitNumber": 5,
+                        "progress": {"show": True, "width": 14, "roundCap": True,
+                                     "itemStyle": {"color": {
+                                         "type": "linear", "x": 0, "y": 0, "x2": 1, "y2": 0,
+                                         "colorStops": [{"offset": 0, "color": "#6366f1"}, {"offset": 1, "color": "#38bdf8"}]
+                                     }}},
+                        "pointer": {"show": False},
+                        "axisLine": {"lineStyle": {"width": 14, "color": [[1, "#1e293b"]]}},
+                        "axisTick": {"show": False},
+                        "splitLine": {"show": False},
+                        "axisLabel": {"color": "#475569", "fontSize": 10},
+                        "title": {"show": True, "offsetCenter": [0, "30%"], "fontSize": 12,
+                                  "fontWeight": "bold", "color": "#64748b"},
+                        "detail": {
+                            "valueAnimation": True,
+                            "formatter": "{value}",
+                            "color": "#818cf8",
+                            "fontSize": 22,
+                            "fontWeight": "bold",
+                            "offsetCenter": [0, "5%"]
+                        },
+                        "data": [{"value": round(g_val, 2), "name": g_col[:16]}]
+                    }]
+                }
+                with gcols[i]:
+                    st_echarts(options=gauge_opts, height="220px", key=f"dash_gauge_{i}")
+
+            # ── Row 6: Top N Table ───────────────────────────────────
+            st.markdown('<div class="dash-section-title">🏆 Top Records</div>', unsafe_allow_html=True)
+            top_sort_col = st.selectbox("Sort by", num_cols, key="dash_top_col")
+            top_n = st.slider("Number of records", 5, 50, 10, key="dash_top_n")
+            top_df = df.nlargest(top_n, top_sort_col)
+            st.dataframe(
+                top_df.style
+                    .background_gradient(cmap="Blues", subset=[c for c in num_cols if c in top_df.columns])
+                    .format({c: "{:,.2f}" for c in num_cols if c in top_df.columns}),
+                use_container_width=True,
+                height=min(top_n * 36 + 60, 500)
+            )
 
 # ------------------------------------------
 # Tab 5: Export Pipeline (Reproducibility)
