@@ -24,6 +24,7 @@ from streamlit_extras.add_vertical_space import add_vertical_space
 from streamlit_extras.stylable_container import stylable_container
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
+from ydata_profiling import ProfileReport
 
 # ==========================================
 # Configuration & Setup
@@ -541,6 +542,18 @@ with tab2:
             else:
                 st.success("No missing values detected! ✅")
             
+        st.subheader("🤖 Automated Deep Profiling (ydata-profiling)")
+        st.markdown("Generate a comprehensive, interactive HTML report revealing all correlations, interactions, and data health metrics (Inspired by **Advanced EDA** practices).")
+        if st.button("Generate Deep Profiling Report"):
+            with st.spinner("Analyzing dataset with ydata-profiling... This might take a moment."):
+                try:
+                    profile = ProfileReport(df, title="Automated Data Profile", explorative=True, minimal=len(df) > 10000)
+                    components.html(profile.to_html(), width=1000, height=800, scrolling=True)
+                    st.success("Deep Profiling Complete!")
+                    log_version_action("Automated EDA", "ProfileReport(df)", "Generated comprehensive ydata-profiling HTML report.")
+                except Exception as e:
+                    st.error(f"Profiling failed. Ensure the dataset is valid: {e}")
+
         st.subheader("Automated Cleaning Actions")
         
         if st.button("Run Smart Imputation (Heuristic)"):
@@ -887,9 +900,10 @@ with tab4:
                     Possible values for "chart_type": "scatter", "bar", "histogram", "box", "violin", "treemap", "sunburst".
                     Set "y" to null for histograms.
                     
-                    CRITICAL (IJCDS Best Practices):
-                    1. Avoid oversimplification: Suggest at least one advanced chart type (Treemap, Sunburst, or Violin) if the schema supports it.
-                    2. Rationale: Briefly explain why this chart is effective for this specific data structure.
+                    CRITICAL (2026 Visualization Standards):
+                    1. **NVBench Methodology (Text-to-Vis):** Ensure the strict mapping of the natural language rationale directly aligns with the underlying data types (e.g., temporal data -> lines, highly categorical -> treemap).
+                    2. **ChartQA Logic:** Act as a data agent. What is the most profound analytical question this specific schema answers? Suggest the visual representation that directly answers that question.
+                    3. Avoid oversimplification: Suggest at least one advanced chart type (Treemap, Sunburst, or Violin) if the schema supports it.
                     """
                     try:
                         import json
@@ -1031,19 +1045,27 @@ with tab_altair:
             
             base = alt.Chart(df).encode(
                 color=alt.Color(f'{color_alt}:N', scale=alt.Scale(range=BRAND_COLORS)) if color_alt != "None" else alt.value(BRAND_COLORS[0])
-            ).add_params(brush)
+            )
             
-            # Main Scatter
+            # Main Scatter - Add the brush here
             scatter = base.mark_point(filled=True, size=60).encode(
                 x=alt.X(x_alt),
                 y=alt.Y(y_alt),
                 tooltip=df.columns.tolist()
-            ).properties(width=500, height=400)
+            ).add_params(brush).properties(width=500, height=400)
             
-            # Histogram for X axis selection influence
+            # Histogram for X axis selection influence - Filter by the brush
+            if color_alt != "None":
+                bars_y = alt.Y(f'{color_alt}:N').title("Segment")
+            else:
+                # Use a constant string for the Y axis when no color segment is selected
+                bars_y = alt.Y('Dataset:N').title("Dataset")
+                
             bars = base.mark_bar().encode(
                 x='count()',
-                y=alt.Y(f'{color_alt}:N').title("Segment") if color_alt != "None" else alt.value("Total")
+                y=bars_y
+            ).transform_calculate(
+                Dataset='datum.Dataset || "Total"'
             ).transform_filter(brush).properties(width=500, height=150)
             
             st.altair_chart(scatter & bars, use_container_width=True)
