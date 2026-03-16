@@ -133,6 +133,31 @@ In this phase, we implemented features that move beyond standard Business Intell
 * **Implemented Solution:** **Live Version History (Git-Lite).**
   Implemented a persistent state-log in the *Governance Sidebar*. It records every analytical action, SQL query, and AI surgery with exact timestamps and code logic, solving the modern "Data Provenance" problem.
 
+### 3. Comprehensive ETL & Data Pipelines
+The tool bridges the gap between raw ingestion and sophisticated BI by implementing a built-in transformation layer:
+- **dbt-Style Modeling:** Users can write modular SQL to create persistent views and tables in DuckDB, enabling a "Transformation after Load" (ELT) workflow.
+- **Airbyte-Style Ingestion:** Integrated connectors (starting with GitHub) allow for pulling live data from external APIs directly into the analysis environment.
+
+### 4. Zero-Friction Knowledge Hub
+The tool is designed for "Instant-On" analysis via a local Knowledge Base:
+- **Dataset Hub:** Automatically discovers and indexes datasets (CSV/ZIP) within the local environment for one-click ingestion.
+- **AI Schema Insight:** Upon loading any dataset, the AI instantly generates "Analysis Missions"—suggested strategic paths that jumpstart the analytical workflow without manual prompting.
+
+### 5. Advanced Predictive Analytics (Forecasting Lab)
+Moving beyond descriptive statistics, the tool includes a dedicated Machine Learning sandbox:
+- **Trend Training:** Integrated `scikit-learn` allows users to train Polynomial Regression models on historical data (e.g., UN Population metrics).
+- **Expert vs. AI Benchmarking:** Users can visualize AI-generated forecasts against established expert projections (UN Medium Variant) to identify divergence and economic anomalies.
+
+### 6. Data Journalism & Narrative Modeling (Journalist Lab)
+Inspired by industry leaders like FiveThirtyEight, the tool now supports professional narrative-building:
+- **538-Style Theming:** A custom visualization engine that applies signature authoritative aesthetics (specific typography, color palettes, and grid hierarchies) to any dataset.
+- **Statistical Smoothing:** Integrated rolling-average simulators that allow users to aggregate noisy polling or market data into clear, journalistic trends.
+
+### 7. Advanced Automated EDA & Viz AI Prompts (2026 Standards)
+To ensure the tool combines high-reasoning accuracy with beautiful design systems:
+- **Deep Profiling Engine:** Integrated `ydata-profiling` to automatically generate comprehensive, interactive HTML reports detailing schema warnings, correlations, and interactions.
+- **NVBench & ChartQA Prompt Architecture:** The AI visualization recommendation engine is specifically prompted to follow `NVBench` (strict text-to-vis mapping) and `ChartQA` (question-data-visual logic) methodologies. This ensures the AI doesn't just guess a chart type, but semantically understands the relationship between the insight and the visual grammar.
+
 ---
 
 - **Tab 5: Export Options**: Enables strict reproducibility by allowing users to download the session's Python code and dependency list.
@@ -148,6 +173,15 @@ In this phase, we implemented features that move beyond standard Business Intell
 | **Proprietary AI Lock-in:** Users are forced into expensive Copilot or Einstein ecosystems with no redundancy. | **Multi-Model Resilience:** Agnostic AI system with zero-cost fallback (Gemini ↔ Groq), ensuring uptime and budget control. |
 | **Data Cleaning Paywalls:** Advanced PII masking and Data Governance often require "Premium" or "Enterprise" licenses. | **Built-in Governance:** Professional PII Redaction, SQL Security Sandboxing, and Data Quality Audits are core architectural features. |
 | **Reactive Only:** Traditional dashboards wait for human input; they don't *execute* data cleaning tasks. | **Agentic Execution:** AI translates natural language concepts into live optimized SQL filters and can execute "Data Surgery" on the fly via the AI Assistant. |
+| **Expensive Desktop Licensing:** Tableau and Power BI Desktop require hefty paid licenses for drag-and-drop report building. | **Open-Source Drag & Drop:** Integrated **PyGWalker**, providing a full Tableau-style Canvas experience completely free within the browser. |
+| **Limited Interactive Sophistication:** Built-in charts in standard tools often lack deep cross-filtering or declarative grammar. | **Declarative & Premium Viz:** Integrated **Altair** and **ECharts**, enabling both complex sub-second interactive selections and animated premium visuals. |
+| **Static Data Grids:** Viewing data in standard tools is often a "read-only" experience with limited sorting. | **Professional Grids:** Integrated **AgGrid**, providing an Excel-like experience with live cell editing and advanced grouping. |
+| **Monolithic ETL:** Traditional BI tools require external tools (Alteryx, Informatica) or complex "M" code for transformations. | **MDS Ready (dbt/Airbyte):** Native SQL modeling (dbt-style) and API connectors (Airbyte-style) built directly into the UI for a seamless ELT experience. |
+| **Manual Discovery:** Users must manually explore every new dataset to find insights. | **AI-Guided Discovery:** The **Dataset Hub** indexes local knowledge, and **AI Schema Insight** automatically suggests high-value analysis missions upon loading. |
+| **Static Hindsight:** Most BI tools only show what happened in the past (Descriptive Analytics). | **Predictive Lab:** Built-in **Forecasting Lab** uses `scikit-learn` to train models on historical data, enabling one-click future projections and expert-to-AI benchmarking. |
+| **Generic Aesthetics:** Default charts often look like "PPT templates," lacking the authority of professional publications. | **Journalist Ready (538 Style):** A specialized **Journalist Lab** that applies FiveThirtyEight’s signature statistical smoothing and aesthetics to help users tell authoritative data stories. |
+| **Manual EDA Overhead:** Data Scientists waste hours writing boilerplate pandas `.describe()` scripts to find missing values. | **Zero-Click EDA (ydata-profiling):** Generates a comprehensive, interactive HTML report instantly, automatically discovering correlations, outliers, and schema warnings. |
+| **Blind AI Chart Guessing:** "Copilots" often recommend illogical charts (e.g., line charts for nominal categories) without deeper semantic reasoning. | **Academic-Grade AI Viz Architecture:** Prompts are architected on **NVBench** (Text-to-Vis mapping rules) and **ChartQA** logic, forcing the AI to align visual grammar with deep analytical intent. |
 
 ---
 
