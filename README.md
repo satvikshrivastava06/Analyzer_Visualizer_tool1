@@ -5,7 +5,6 @@
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://yourapp.streamlit.app)
 [![CI](https://github.com/satvikshrivastava06/Analyzer_Visualizer_tool1/actions/workflows/ci.yml/badge.svg)](https://github.com/satvikshrivastava06/Analyzer_Visualizer_tool1/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![DuckDB](https://img.shields.io/badge/DuckDB-1.4.4-yellow.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red.svg)
 
