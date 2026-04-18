@@ -1,0 +1,17 @@
+streamlit
+pandas
+duckdb==1.4.4
+plotly
+google-generativeai
+numpy
+groq
+altair
+scikit-learn
+requests
+pygwalker
+streamlit-aggrid
+streamlit-echarts
+streamlit-extras
+sweetviz
+fpdf2
+kaleido

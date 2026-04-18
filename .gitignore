@@ -1,0 +1,49 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+
+# Datasets and large data directories
+Datasets/
+ChartQA-main/
+nvBench-main/
+DataLens_v2_extracted/
+population-with-un-projections/
+
+# Large files
+*.zip
+*.pkl
+*.h5
+*.hdf5
+*.model
+profile.html
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+.env.*
