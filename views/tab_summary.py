@@ -71,7 +71,7 @@ def render_tab_summary(conn):
             opacity=0.7
         )
         apply_plotly_theme(fig)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.markdown(anomaly_row("Insufficient numeric columns to generate a strategic scatter overview.", "warning"), unsafe_allow_html=True)
 
@@ -90,7 +90,7 @@ def render_tab_summary(conn):
                     outlier_df = item['outliers']
                     
                     with st.expander(f"🚩 Column: {col} ({count} outliers detected)", expanded=True):
-                        st.dataframe(outlier_df.head(10), use_container_width=True)
+                        st.dataframe(outlier_df.head(10), width='stretch')
                         st.markdown("---")
                         st.markdown("**AI Interpretation:**")
                         explanation = explain_anomalies(df, outlier_df, col)

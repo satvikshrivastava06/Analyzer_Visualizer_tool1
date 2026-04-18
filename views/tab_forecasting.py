@@ -66,4 +66,4 @@ def render_tab_forecasting():
                     fig.add_trace(go.Scatter(x=pred_df[col_x], y=pred_df['AI_Prediction'], name=f"Forecast (Deg {poly_degree})", line=dict(color=CHART_COLORS[3], width=3)))
                     fig.update_layout(title=f"Forecast: {col_y}", xaxis_title=col_x, yaxis_title=col_y)
                     apply_plotly_theme(fig)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')

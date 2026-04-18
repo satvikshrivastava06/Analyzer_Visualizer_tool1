@@ -94,7 +94,7 @@ def render_tab_altair(BRAND_COLORS):
                 Dataset='"Total"'
             ).transform_filter(brush).properties(width=500, height=150)
             
-            st.altair_chart(scatter & bars, use_container_width=True)
+            st.altair_chart(scatter & bars, width='stretch')
             st.caption("💡 **Tip:** Click and drag on the scatter plot to select a region. The bar chart below will dynamically update to show the distribution of the selected points.")
         else:
             st.markdown(anomaly_row("At least two numerical columns are required for Altair Interactive insights.", "warning"), unsafe_allow_html=True)
@@ -192,12 +192,12 @@ def render_tab_dashboard():
                     )
                     fig_bar.update_traces(textposition="outside", textfont_color="#94a3b8")
                     apply_plotly_theme(fig_bar)
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, width='stretch')
                 else:
                     fig_hist = px.histogram(df, x=primary_num, title=f"Distribution of {primary_num}",
                                             nbins=30, color_discrete_sequence=["#818cf8"])
                     apply_plotly_theme(fig_hist)
-                    st.plotly_chart(fig_hist, use_container_width=True)
+                    st.plotly_chart(fig_hist, width='stretch')
 
             with r2c2:
                 if len(num_cols) >= 2:
@@ -216,7 +216,7 @@ def render_tab_dashboard():
                     )
                     fig_scatter.update_traces(marker=dict(line=dict(width=0.5, color="rgba(255,255,255,0.2)")))
                     apply_plotly_theme(fig_scatter)
-                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    st.plotly_chart(fig_scatter, width='stretch')
 
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(section_header("▣", "Hierarchical & Statistical Views", "Deep dive insights"), unsafe_allow_html=True)
@@ -237,7 +237,7 @@ def render_tab_dashboard():
                             color_continuous_scale=[[0, "#1e1b4b"], [0.5, "#6d28d9"], [1, "#e879f9"]]
                         )
                         apply_plotly_theme(fig_tree)
-                        st.plotly_chart(fig_tree, use_container_width=True)
+                        st.plotly_chart(fig_tree, width='stretch')
                         dashboard_figs.append(fig_tree)
                     except Exception:
                         st.markdown(anomaly_row("Treemap could not be generated with these dimensions.", "info"), unsafe_allow_html=True)
@@ -254,7 +254,7 @@ def render_tab_dashboard():
                     )
                     apply_plotly_theme(fig_box)
                     fig_box.update_layout(showlegend=False)
-                    st.plotly_chart(fig_box, use_container_width=True)
+                    st.plotly_chart(fig_box, width='stretch')
                     dashboard_figs.append(fig_box)
                 else:
                     fig_box = px.box(
@@ -263,7 +263,7 @@ def render_tab_dashboard():
                         color_discrete_sequence=["#f87171"]
                     )
                     apply_plotly_theme(fig_box)
-                    st.plotly_chart(fig_box, use_container_width=True)
+                    st.plotly_chart(fig_box, width='stretch')
                     dashboard_figs.append(fig_box)
 
             # Insert earlier figures too

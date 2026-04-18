@@ -67,7 +67,7 @@ def render_tab_journalist(conn):
                     
                     fig.update_layout(title=f"Narrative Trend Analysis: {y_axis}")
                     apply_plotly_theme(fig)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown(section_header("🎙️", "Journalistic Commentary", "AI-driven interpretation"), unsafe_allow_html=True)

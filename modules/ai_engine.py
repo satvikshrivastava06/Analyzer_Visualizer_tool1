@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 import streamlit as st
 import pandas as pd
 from typing import Tuple, List
@@ -44,20 +44,20 @@ def safe_ai_call(prompt: str) -> Tuple[str, str]:
 
     # --- Tier 1: Gemini (Google AI Studio Free Tier) ---
     if gemini_key:
-        genai.configure(api_key=gemini_key)
+        client = genai.Client(api_key=gemini_key)
         gemini_candidates = [
-            'models/gemini-2.5-flash',       # Best: Latest & most capable
-            'models/gemini-2.0-flash',        # Good: Fast & reliable
-            'models/gemini-2.0-flash-lite',   # Lighter quota usage
-            'models/gemini-flash-latest',     # Alias: always latest flash
-            'models/gemma-3-27b-it',          # Open: Google's Gemma 3 27B
-            'models/gemma-3-12b-it',          # Open: Google's Gemma 3 12B
-            'models/gemini-pro-latest',       # Classic: Gemini Pro
+            'gemini-2.5-flash',       # Best: Latest & most capable
+            'gemini-2.0-flash',       # Good: Fast & reliable
+            'gemini-2.0-flash-lite',  # Lighter quota usage
+            'gemma-3-27b-it',         # Open: Google's Gemma 3 27B
+            'gemma-3-12b-it',         # Open: Google's Gemma 3 12B
         ]
         for model_name in gemini_candidates:
             try:
-                model = genai.GenerativeModel(model_name)
-                resp = model.generate_content(prompt)
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
                 return resp.text, model_name
             except Exception as e:
                 err = str(e).lower()

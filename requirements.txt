@@ -2,7 +2,7 @@ streamlit
 pandas
 duckdb==1.4.4
 plotly
-google-generativeai
+google-genai
 numpy
 groq
 altair

@@ -50,7 +50,7 @@ def render_tab_cleaning(conn):
             pdf = df.describe(include='all')
             # If all categorical, describe() returns different indices. We fillna for visual comfort.
             pdf = pdf.fillna('-').astype(str)
-            st.dataframe(pdf, use_container_width=True, height=450)
+            st.dataframe(pdf, width='stretch', height=450)
             st.caption("Auto-generated statistical summary across all data types.")
         except Exception as e:
             st.markdown(anomaly_row(f"Profiling Error: {e}", "warning", "Ensure column types are consistent."), unsafe_allow_html=True)
@@ -68,7 +68,7 @@ def render_tab_cleaning(conn):
                 miss_stats.append({"Column": col, "Count": cnt, "Percentage": f"{pct:.1f}%"})
             
             mstd = pd.DataFrame(miss_stats)
-            st.dataframe(mstd, use_container_width=True, height=450)
+            st.dataframe(mstd, width='stretch', height=450)
         else:
             st.markdown(anomaly_row("Dataset is 100% complete. No missing fields detected.", "success"), unsafe_allow_html=True)
         

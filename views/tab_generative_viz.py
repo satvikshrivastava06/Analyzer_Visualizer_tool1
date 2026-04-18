@@ -56,7 +56,7 @@ def render_tab_generative_viz(conn, gemini_key, groq_key, BRAND_COLORS):
 
             if fig:
                 apply_plotly_theme(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
             if y_ax != "None":
                 with st.expander(f"📊 Statistical Context for {x_ax} & {y_ax} (IJCDS Best Practice)", expanded=False):
@@ -82,7 +82,7 @@ def render_tab_generative_viz(conn, gemini_key, groq_key, BRAND_COLORS):
                 fig = build_plotly_chart(df, chart_config)
                 if fig:
                     apply_plotly_theme(fig)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.markdown(anomaly_row("AI suggested a chart, but Plotly could not render it with the current data.", "danger"), unsafe_allow_html=True)
             else:
@@ -160,7 +160,7 @@ def render_tab_generative_viz(conn, gemini_key, groq_key, BRAND_COLORS):
                             
                             if fig:
                                 apply_plotly_theme(fig)
-                                st.plotly_chart(fig, use_container_width=True)
+                                st.plotly_chart(fig, width='stretch')
                         except Exception as e:
                             st.error(f"Chart generation failed: {e}")
             
@@ -194,6 +194,6 @@ def render_tab_generative_viz(conn, gemini_key, groq_key, BRAND_COLORS):
                 suggested_sql = suggested_sql.replace("```sql", "").replace("```", "").strip()
                 st.info(f"AI-driven Semantic Filter applied: `{suggested_sql}`")
                 search_results = conn.execute(suggested_sql).df()
-                st.dataframe(search_results, use_container_width=True)
+                st.dataframe(search_results, width='stretch')
             except Exception as e:
                 st.markdown(anomaly_row(f"Semantic search failed: {e}", "danger"), unsafe_allow_html=True)

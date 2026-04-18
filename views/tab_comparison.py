@@ -77,7 +77,7 @@ def render_tab_comparison():
                     'Comparison Mean': '{:,.2f}',
                     'Delta': '{:+,.2f}',
                     'Delta %': '{:+.1f}%'
-                }).applymap(color_delta, subset=['Delta %']), use_container_width=True)
+                }).applymap(color_delta, subset=['Delta %']), width='stretch')
                 
                 # Visualizing shifts
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -91,7 +91,7 @@ def render_tab_comparison():
                 ]), x=selected_metric, color="Source", barmode="overlay", title=f"Distribution Drift: {selected_metric}", color_discrete_sequence=[CHART_COLORS[0], CHART_COLORS[1]])
                 
                 apply_plotly_theme(fig)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 
             else:
                 st.markdown(anomaly_row("No shared numerical columns found for statistical comparison.", "info"), unsafe_allow_html=True)

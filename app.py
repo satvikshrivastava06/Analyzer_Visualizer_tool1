@@ -317,7 +317,6 @@ with tab5:
     render_tab_export()
 
 # Footer
-from streamlit_extras.add_vertical_space import add_vertical_space
-add_vertical_space(5)
+st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
 if st.button("⬆️ Back to Top"):
     st.write('<style>div.block-container{padding-top:2rem;}</style>', unsafe_allow_html=True)

@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import json
-import pygwalker as pyg
 from streamlit.components.v1 import html as st_html
 
 # ── Design tokens (Data Analyzer & Visualizer Tool Theme) ──────────────────────
@@ -98,6 +97,7 @@ def render_walker_tab(df: pd.DataFrame):
         st.markdown("<hr style='margin:12px 0; border-color:#2A2F45'>", unsafe_allow_html=True)
 
         try:
+            import pygwalker as pyg  # Lazy import — prevents segfault on startup
             # ── Build spec ──────────────────────────────────────────────────
             if st.session_state.pyg_geo_mode and has_geo:
                 # Geographic coordinate system spec for world map plotting
